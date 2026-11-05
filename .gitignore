@@ -1,0 +1,13 @@
+# run artifacts
+*.log
+*.old
+*.old_*
+SoftwareDistribution*/
+catroot2*/
+
+# os / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
