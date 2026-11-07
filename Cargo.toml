@@ -1,0 +1,18 @@
+[package]
+name = "wu-repair-cycle"
+version = "2.0.0"
+edition = "2021"
+description = "Resume Windows Update, run every corruption-repair command (DISM/SFC/chkdsk/WU reset), then pause updates permanently until 2099"
+license = "MIT"
+
+[lib]
+name = "wu_repair_cycle"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wu-repair-cycle"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2
+lto = true
