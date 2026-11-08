@@ -47,6 +47,29 @@ Every command `wu-repair-cycle.exe` executes, with ok-codes, timeouts, retry lad
 | pause-disable-wuauserv | start type → disabled (4), verified |
 | pause-disable-medic | registry `WaaSMedicSvc\Start = 4` |
 
+## Install suppression (Phase 1, kept by Phase 3)
+
+| Step | Action | Purpose |
+|---|---|---|
+| resume-sup-NoAutoUpdate | `AU\NoAutoUpdate = 1` (re-applied after services are verified) | no automatic detection/install while repairs run |
+| resume-sup-AUOptions | `AU\AUOptions = 2` | notify-only |
+| resume-sup-NoAutoReboot | `AU\NoAutoRebootWithLoggedOnUsers = 1` | Windows can never force a restart under a logged-on user |
+| resume-sup-StoreAutoDownload | `WindowsStore\AutoDownload = 2` | no Store app auto-install storms |
+
+DISM fetches repair payloads directly and bypasses these policies — repairs keep
+full download capability while install churn is silenced. This prevents the
+servicing-stack crashes and forced-restart class of instability observed on
+preview builds.
+
+## Terminations (kill-resilience rule)
+
+On this class of host, repair processes are sometimes terminated externally
+(exit -1, or 0x40010004) with no verdict produced. Rule: a terminated process is
+retried (up to 3 times, 30 s pauses, neutral transcript notes) and NEVER counted
+as a command failure; a command that eventually completes legitimately passes
+and reports how many terminations it outlived. Only a real verdict can pass or
+fail the gate.
+
 ## The zero-error gate
 
 `exit code = 0` ⟺ every step's ok flag is true. Every classification rule is visible in the step's detail line — findings are reported, not buried.
