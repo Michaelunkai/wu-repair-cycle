@@ -88,6 +88,37 @@ pub fn run_quiet(
     run_inner(id, program, args, ok_codes, timeout_secs, true)
 }
 
+/// Number of dism.exe processes currently running (any owner).
+fn dism_count() -> usize {
+    Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq dism.exe", "/FO", "CSV", "/NH"])
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter(|l| l.to_ascii_lowercase().starts_with("\"dism.exe\""))
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Two DISM operations at once corrupt each other's servicing session: if a
+/// foreign DISM is running, wait for it (heartbeat every 5 s, max 20 min).
+fn wait_foreign_dism() {
+    if dism_count() == 0 {
+        return;
+    }
+    let start = Instant::now();
+    crate::ui::info("another DISM is already running - waiting for it to finish");
+    while dism_count() > 0 && start.elapsed() < Duration::from_secs(1200) {
+        std::thread::sleep(Duration::from_secs(5));
+        crate::ui::heartbeat(&format!(
+            "waiting for foreign DISM - {}s",
+            start.elapsed().as_secs()
+        ));
+    }
+}
+
 /// Run with kill-resilience: on this host, repair processes are sometimes
 /// terminated externally (exit -1 / negative codes, no crash record). A
 /// terminated process produced NO verdict - retry instead of failing. The
@@ -100,6 +131,9 @@ pub fn run_steady(
     ok_codes: &[i32],
     timeout_secs: u64,
 ) -> CmdResult {
+    if program.eq_ignore_ascii_case("dism.exe") {
+        wait_foreign_dism();
+    }
     let mut r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
     let mut kills = 0usize;
     // A run whose OUTPUT contains a real verdict (DISM printed the complete
