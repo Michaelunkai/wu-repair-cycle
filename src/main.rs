@@ -11,10 +11,22 @@ fn main() {
     let mut explicit_source: Option<String> = None;
     let mut it = args.iter().skip(1);
     while let Some(a) = it.next() {
-        if a == "--source" {
-            explicit_source = it.next().cloned();
+        if a == "--help" || a == "-h" {
+            println!("wu-repair-cycle [--dry-run | --check-only | --pause-only] [--source <wim|esd|swm|iso>]\n  (no flags = full elevated repair cycle)");
+            std::process::exit(0);
+        } else if a == "--source" {
+            match it.next() {
+                Some(v) => explicit_source = Some(v.clone()),
+                None => {
+                    eprintln!("--source needs a path; refusing to start a full run");
+                    std::process::exit(2);
+                }
+            }
         } else if let Some(v) = a.strip_prefix("--source=") {
             explicit_source = Some(v.to_string());
+        } else if a != "--check-only" && a != "--dry-run" && a != "--pause-only" {
+            eprintln!("unknown argument '{}'; refusing to start a full run (try --help)", a);
+            std::process::exit(2);
         }
     }
 
