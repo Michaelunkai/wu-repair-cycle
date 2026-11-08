@@ -112,14 +112,14 @@ pub fn heartbeat(msg: &str) {
     out(&format!("  {} {}", cyan("[..]"), dim(msg)));
 }
 
-/// Wait `total_secs` one second at a time, emitting a heartbeat every 10 s so
+/// Wait `total_secs` one second at a time, emitting a heartbeat every 8 s so
 /// the console never goes silent during planned waits.
 pub fn wait_steps(total_secs: u64, label: &str) {
     let mut since = 0u64;
     for _ in 0..total_secs {
         std::thread::sleep(std::time::Duration::from_secs(1));
         since += 1;
-        if since.is_multiple_of(10) {
+        if since.is_multiple_of(8) {
             heartbeat(&format!("{} — {}s of {}s", label, since, total_secs));
         }
     }

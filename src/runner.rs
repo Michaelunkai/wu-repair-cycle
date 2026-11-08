@@ -272,7 +272,7 @@ fn run_inner(
         }
         // THE 10-SECOND LAW: in quiet mode the console must never go silent —
         // emit a heartbeat with elapsed time and the latest progress snapshot.
-        if quiet && last_beat.elapsed() >= Duration::from_secs(10) {
+        if quiet && last_beat.elapsed() >= Duration::from_secs(8) {
             crate::ui::heartbeat(&format!(
                 "{} — {}s elapsed — {}",
                 id,
