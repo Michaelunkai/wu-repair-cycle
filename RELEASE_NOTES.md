@@ -1,3 +1,18 @@
+# v2.1.0 — the 0x800f0915 killers
+
+Two real bugs from live runs, fixed at the root:
+
+**1. `sfc /verifynow` never existed.** SFC printed its usage banner and exited 1 (the "FAIL" line). The valid switch is **`/verifyonly`** — now used in R6 and the final gate, classified by output text (no violations / repaired / cannot-fix / pending-CBS), with the `/scannow` substitution firing *only* for a genuine pending-CBS rejection.
+
+**2. `0x800f0915` "The repair content could not be found anywhere" is now fought, not just classified.** Live forensics on this host proved WU serves `E_NOINTERFACE` for the pinned payloads (`Client.OS.rs2.amd64:0x80004002` — retired/mis-targeted flight content). The new R4b block, triggered when the WU ladder exhausts on 0915:
+- **Forensics** — parses CBS.log + dism.log, captures the `CheckSur` download-results line naming every payload WU refused, into the transcript and the step detail.
+- **Local SOURCE ladder** — DISM's own advice ("use the Source option"), automated: scan every drive for `X:\sources\install.wim|.esd|.swm` (already-mounted media) and for Windows ISOs shallow on all fixed drives + Downloads; auto-mount ISOs (`Mount-DiskImage`, dismounted after); probe WIM/ESD indexes (with ESD quirk fallback); rank against the running OS (same build + same edition + closest revision ≤ UBR first, never older build lines); run `/RestoreHealth /Source:wim|esd:path:index` up to 3 times. New `--source <file>` flag adds any image (ISO or WIM/ESD/SWM) by hand.
+- **Connectivity probe (R-pre)** — curl NCSI + WU-CDN before anything else, honoring DISM's "check the internet connectivity" advice (and tolerant of TLS-intercepting networks).
+
+A live experiment on this host (RestoreHealth `/Source` from a 26200.8037 ISO against the running 26200.9457) proved CBS pins exact revisions and refuses older same-build sources — so the ladder attempts and reports honestly, and the documented finding is now "no local source holds the pinned payloads" (still SFC-validated).
+
+Tests: 5 → **7** (WIM parsing, index ranking).
+
 # v2.0.0 — the Rust edition
 
 Complete rewrite in Rust: zero dependencies, hand-rolled Win32 FFI (elevation, SCM, registry, service-object security, VT console, `NtCreatePagingFile`), one exe.

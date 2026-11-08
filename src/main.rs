@@ -5,8 +5,21 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     ui::enable();
 
+    // --source <path> / --source=<path>: point RestoreHealth at a local image
+    // (install.wim/.esd/.swm or an ISO, mounted on demand) when Windows Update
+    // has no repair content (0x800f0915).
+    let mut explicit_source: Option<String> = None;
+    let mut it = args.iter().skip(1);
+    while let Some(a) = it.next() {
+        if a == "--source" {
+            explicit_source = it.next().cloned();
+        } else if let Some(v) = a.strip_prefix("--source=") {
+            explicit_source = Some(v.to_string());
+        }
+    }
+
     if args.iter().any(|a| a == "--check-only") {
-        ui::banner("WU-Repair-Cycle v2.0.0 — CHECK ONLY (read-only, nothing changes)");
+        ui::banner("WU-Repair-Cycle v2.1.0 — CHECK ONLY (read-only, nothing changes)");
         resume::check_only_report();
         std::process::exit(0);
     }
@@ -16,6 +29,27 @@ fn main() {
         std::process::exit(0);
     }
 
+    // Safeguard mode: skip repairs, only guarantee the permanent pause. Used by
+    // the supervisor as the last-resort end state when repair attempts die.
+    if args.iter().any(|a| a == "--pause-only") {
+        if !winapi::is_admin() {
+            println!("Requesting administrator rights...");
+            winapi::relaunch_elevated();
+        }
+        ui::banner("PAUSE ONLY — permanently pause Windows Update (no repairs)");
+        runner::transcript_line("=== PAUSE-ONLY run ===");
+        let steps = pause::run();
+        let code = verify::gate(&steps);
+        ui::summary(&steps, 0, false);
+        runner::transcript_line(&format!(
+            "FINAL gate={} steps={} failed={}",
+            code,
+            steps.len(),
+            steps.iter().filter(|s| !s.ok).count()
+        ));
+        std::process::exit(code);
+    }
+
     // Full cycle — self-elevate first.
     if !winapi::is_admin() {
         println!("Requesting administrator rights...");
@@ -23,7 +57,10 @@ fn main() {
     }
 
     let t0 = Instant::now();
-    runner::transcript_line("=== WU-Repair-Cycle v2.0.0 full run ===");
+    runner::transcript_line("=== WU-Repair-Cycle v2.1.0 full run ===");
+    if let Some(s) = &explicit_source {
+        runner::transcript_line(&format!("explicit source: {}", s));
+    }
 
     ui::banner("PHASE 1 / 3 — RESUME Windows Update (remove every pause mechanism)");
     runner::transcript_line("=== PHASE 1: RESUME ===");
@@ -31,7 +68,7 @@ fn main() {
 
     ui::banner("PHASE 2 / 3 — REPAIR: every corruption command, zero-error gate");
     runner::transcript_line("=== PHASE 2: REPAIR ===");
-    let (rsteps, reboot) = repair::run_all();
+    let (rsteps, reboot) = repair::run_all(explicit_source.as_deref());
     steps.extend(rsteps);
 
     ui::banner("PHASE 3 / 3 — PAUSE Windows Update PERMANENTLY (until 2099)");
@@ -49,6 +86,7 @@ fn main() {
     println!("Transcript: {}", runner::transcript_name());
     if code == 0 {
         ui::ok("Windows updates permanently paused - returning to shell.");
+        ui::ok("Your PC stays on: nothing in this tool restarts, shuts down, or logs off Windows - a reboot is only ever your own choice.");
     } else {
         ui::err("Some steps FAILED - see the table above and the transcript log.");
     }
@@ -88,14 +126,17 @@ fn dry_run() {
         add(&format!("resume-svc-{}", s), &format!("start + verify {}", s), &mut steps);
     }
 
-    ui::step("PHASE 2 — REPAIR MATRIX (R0-R11)");
+    ui::step("PHASE 2 — REPAIR MATRIX (R-pre, R0-R11)");
+    add("net-connectivity", "curl msftconnecttest + windowsupdate.com (repair-payload download path)", &mut steps);
     add("reset-components", "stop svcs, rename SoftwareDistribution + catroot2, restart svcs", &mut steps);
     add("dism-analyze", "dism /Online /Cleanup-Image /AnalyzeComponentStore", &mut steps);
     add("dism-checkhealth", "dism /Online /Cleanup-Image /CheckHealth", &mut steps);
     add("dism-scanhealth", "dism /Online /Cleanup-Image /ScanHealth", &mut steps);
     add("dism-restore", "dism /Online /Cleanup-Image /RestoreHealth (3-attempt ladder, fresh store between attempts)", &mut steps);
+    add("dism-log-forensics", "parse CBS + DISM logs for the exact missing-payload identities", &mut steps);
+    add("dism-restore-src", "dism /RestoreHealth /Source (local image ladder: mounted media, auto-mounted ISOs, --source path)", &mut steps);
     add("sfc-scannow", "sfc /scannow (+ extra restore+sfc pair if it cannot fix)", &mut steps);
-    add("sfc-verifynow", "sfc /verifynow", &mut steps);
+    add("sfc-verifyonly", "sfc /verifyonly (falls back to /scannow only when CBS is pending)", &mut steps);
     let sysdrive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
     for d in winapi::fixed_drives() {
         let is_sys = d == sysdrive;
@@ -113,7 +154,7 @@ fn dry_run() {
     add("dism-componentcleanup", "dism /Online /Cleanup-Image /StartComponentCleanup", &mut steps);
     add("dism-spsuperseded", "dism /Online /Cleanup-Image /SPSuperseded (no-op classified OK)", &mut steps);
     add("dism-checkhealth-final", "dism /Online /Cleanup-Image /CheckHealth (final health gate)", &mut steps);
-    add("sfc-verifynow-final", "sfc /verifynow (final)", &mut steps);
+    add("sfc-verifyonly-final", "sfc /verifyonly (final)", &mut steps);
 
     ui::step("PHASE 3 — PAUSE PERMANENTLY (until 2099)");
     add("pause-keys", "9 pause values (incl PauseUpdatesExpiryDate) + FlightSettingsMaxPauseDays=3650", &mut steps);
@@ -124,4 +165,5 @@ fn dry_run() {
 
     ui::summary(&steps, 0, false);
     ui::info("Run without flags (elevates via UAC) for the real zero-error repair cycle.");
+    ui::info("If DISM reports 0x800f0915 (repair content not found), add: --source <install.wim|.esd|.swm or Windows ISO>");
 }

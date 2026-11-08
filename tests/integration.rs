@@ -1,5 +1,6 @@
 use std::process::Command;
 use wu_repair_cycle::pause::iso_from_unix;
+use wu_repair_cycle::source::{parse_index_detail, parse_index_list, rank_indexes, WimIndex};
 use wu_repair_cycle::verify::{gate, Step};
 use wu_repair_cycle::wu_reset::DLLS;
 
@@ -35,6 +36,10 @@ fn dry_run_zero_exit_all_pass() {
     assert!(out.status.success(), "dry-run must exit 0, got {:?}", out.status.code());
     assert!(s.contains("dism-restore"), "matrix must list RestoreHealth");
     assert!(s.contains("sfc-scannow"), "matrix must list SFC");
+    assert!(s.contains("verifyonly"), "matrix must use the valid /verifyonly switch");
+    assert!(!s.contains("verifynow"), "the invalid /verifynow switch must be gone");
+    assert!(s.contains("net-connectivity"), "matrix must list the connectivity probe");
+    assert!(s.contains("dism-restore-src"), "matrix must list the local-source ladder");
     assert!(s.contains("chkdsk"), "matrix must list chkdsk");
     assert!(s.contains("ZERO ERRORS"), "dry-run summary must show zero errors");
 }
@@ -46,4 +51,74 @@ fn check_only_zero_exit_and_readonly_hint() {
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success());
     assert!(s.contains("Pause keys"), "check-only must report pause keys");
+}
+
+// ---------- source ladder (v2.1.0) ----------
+
+const WIM_LISTING: &str = "\
+Details for image : D:\\sources\\install.wim
+
+Index : 1
+Name : Windows 11 Home
+
+Index : 6
+Name : Windows 11 Pro
+
+Index : 7
+Name : Windows 11 Pro N
+";
+
+const WIM_DETAIL: &str = "\
+Details for image : D:\\sources\\install.wim
+
+Index : 6
+Name : Windows 11 Pro
+Description : Windows 11 Pro
+Size : 24,860,631,795 bytes
+WIM Bootable : No
+Architecture : x64
+Hal : <undefined>
+Version : 10.0.26200
+ServicePack Build : 8037
+ServicePack Level : 0
+Edition : Professional
+Installation : Client
+";
+
+#[test]
+fn wim_index_parsing() {
+    let idxs = parse_index_list(WIM_LISTING);
+    assert_eq!(idxs, vec![1, 6, 7]);
+    let d = parse_index_detail(WIM_DETAIL).expect("detail must parse");
+    assert_eq!(d.index, 6);
+    assert_eq!(d.build, 26200);
+    assert_eq!(d.revision, 8037);
+    assert_eq!(d.edition, "Professional");
+    assert_eq!(d.name, "Windows 11 Pro");
+}
+
+#[test]
+fn rank_prefers_same_build_closest_revision_same_edition() {
+    let mk = |i: u32, name: &str, ed: &str, build: u32, rev: u32| WimIndex {
+        index: i,
+        name: name.to_string(),
+        edition: ed.to_string(),
+        build,
+        revision: rev,
+    };
+    let ix = vec![
+        mk(1, "Windows 11 Home", "Core", 26200, 8037),
+        mk(2, "Windows 11 Pro", "Professional", 26200, 8037),
+        mk(3, "Windows 11 Pro", "Professional", 26200, 9400),
+        mk(4, "Windows 11 Pro 24H2", "Professional", 26100, 4000), // older line
+        mk(5, "Windows 11 Pro", "Professional", 26200, 9999),      // newer than OS
+    ];
+    // OS is 26200.9457 Professional: closest revision <= UBR first, then older
+    // revisions of the same build+edition, then same-build-newer-rev, then other
+    // editions of the same build; the older build line is dead last.
+    let ranked = rank_indexes(&ix, 26200, 9457, "Professional");
+    assert_eq!(ranked[0], 3, "index 3 (rev 9400, closest <= 9457) must rank first");
+    assert_eq!(ranked[1], 2, "index 2 (older rev 8037, same build+edition) must rank second");
+    assert_eq!(ranked[2], 5, "index 5 (same build, newer rev) must rank third");
+    assert_eq!(*ranked.last().unwrap(), 4, "the older build line must rank last");
 }

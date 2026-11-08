@@ -788,6 +788,16 @@ pub fn create_pagefile(win_path: &str, size_gb: u64) -> bool {
 
 /// All fixed drives as "C:", "D:", ...
 pub fn fixed_drives() -> Vec<String> {
+    drive_types()
+        .into_iter()
+        .filter(|(_d, t)| *t == 3)
+        .map(|(d, _)| d)
+        .collect()
+}
+
+/// Every present drive with its GetDriveTypeW type: 2=removable, 3=fixed,
+/// 5=cdrom (mounted ISOs surface as CD-ROM). Used by the repair-source scanner.
+pub fn drive_types() -> Vec<(String, u32)> {
     let mask = unsafe { GetLogicalDrives() };
     let mut v = Vec::new();
     for i in 0..26u32 {
@@ -795,9 +805,8 @@ pub fn fixed_drives() -> Vec<String> {
             let letter = char::from(b'A' + i as u8);
             let root = format!("{}:\\", letter);
             let t = unsafe { GetDriveTypeW(wide(&root).as_ptr()) };
-            if t == 3 {
-                // DRIVE_FIXED
-                v.push(format!("{}:", letter));
+            if t == 2 || t == 3 || t == 5 {
+                v.push((format!("{}:", letter), t));
             }
         }
     }

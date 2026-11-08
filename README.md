@@ -4,7 +4,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![Arch](https://img.shields.io/badge/arch-x86__64--msvc-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-2.0.0-orange)
+![Version](https://img.shields.io/badge/version-2.1.0-orange)
 
 **One run: RESUME Windows Update → run EVERY corruption-repair command Windows offers → PAUSE updates permanently until 2099 → return to shell.**
 
@@ -28,18 +28,20 @@ On hardened machines, Windows Update is blocked by *layers*: pause registry keys
 | # | Command | Notes |
 |---|---|---|
 | P1 | pause-value deletion ×9, UpdatePolicy metadata ×4, policies ×10, SD heal, DO bypass, commit rescue, service start (verified) | wuauserv verified RUNNING; demand services verified startable |
+| R-pre | `curl` NCSI + Windows Update CDN connectivity probe | the "check the internet connectivity" advice, executed and reported before anything else |
 | R0 | store reset: stop 6 services → rename `SoftwareDistribution` + `catroot2` → restart 5 | lock-tolerant, nothing deleted |
 | R1 | `dism /Online /Cleanup-Image /AnalyzeComponentStore` | read-only |
 | R2 | `dism /Online /Cleanup-Image /CheckHealth` | read-only |
 | R3 | `dism /Online /Cleanup-Image /ScanHealth` | read-only |
-| R4 | `dism /Online /Cleanup-Image /RestoreHealth` ×3 ladder | between attempts: re-verify services, 60 s, fresh store; `0x800f0915` after a fully-exhausted ladder is classified a **documented finding** (deprecated-component payloads no longer served by WU) and validated against SFC |
+| R4 | `dism /Online /Cleanup-Image /RestoreHealth` ×3 ladder | between attempts: re-verify services, 60 s, fresh store |
+| R4b | **CBS/DISM log forensics + LOCAL SOURCE ladder** | extracts the exact missing-payload identities (`CheckSur` download results); then searches **every drive** for repair images — already-mounted media (`X:\sources\install.*`), Windows ISOs found shallow on all fixed drives + Downloads (auto-mounted via `Mount-DiskImage`, dismounted after), and `--source <path>` — probes WIM/ESD indexes, ranks them against the running OS build/revision/edition, and runs `/RestoreHealth /Source:wim|esd:path:index` (up to 3 attempts, WU still allowed as fallback). CBS pins exact file revisions, so an older-revision ISO is attempted and its refusal reported honestly |
 | R5 | `sfc /scannow` (+ one extra Restore+SFC pair if it cannot fix) | output-text classified |
-| R6 | `sfc /verifynow` | if CBS pending-state rejects it (instant exit 1), verification falls back to `/scannow` — stated in the step |
+| R6 | `sfc /verifyonly` | the valid verification switch; falls back to `/scannow` ONLY when CBS is in a pending state — stated in the step |
 | R7 | `chkdsk <drive> /scan` on **every fixed drive** | exit 0/1/2 = clean/fixed/cleanup; exit 3 on the system drive schedules a **boot-time** spotfix (`echo Y| chkdsk X /spotfix` — never a live dismount); exit 3 on data drives = reported finding (live fix would dismount — excluded by design) |
 | R8 | `regsvr32 /s` × 32 WU DLLs | missing files skipped; exit 4/5 (`DllRegisterServer` absent/blocked on modern builds) classified no-op — the legacy ceremony is best-effort and the report says so |
 | R9 | `dism /Online /Cleanup-Image /StartComponentCleanup` | post-repair |
 | R10 | `dism /Online /Cleanup-Image /SPSuperseded` | exit 50 / "not supported" classified no-op |
-| R11 | final `dism /CheckHealth` + SFC verification | exit-code verdict; store status reported as a finding |
+| R11 | final `dism /CheckHealth` + `sfc /verifyonly` | exit-code verdict; store status reported as a finding |
 | P3 | 9 pause values → `2099-12-31T23:59:59Z`, `FlightSettingsMaxPauseDays=3650`, `NoAutoUpdate=1`, stop 5 services, `wuauserv` → disabled, `WaaSMedicSvc` → disabled | permanent |
 
 Every step: verified honestly, streamed live in color, written to a timestamped transcript next to the exe, counted in the final table → `ALL N STEPS PASSED — ZERO ERRORS`.
@@ -49,7 +51,7 @@ Every step: verified honestly, streamed live in color, written to a timestamped 
 | Excluded | Reason |
 |---|---|
 | live `chkdsk /f`, `/r`, live `/spotfix` | would **dismount** the live volume — forbidden; only boot-time scheduling on the system drive |
-| `dism /RestoreHealth /LimitAccess` | blocks the very repair source we need |
+| `dism /RestoreHealth /LimitAccess` | blocks the WU fallback path; the `/Source` ladder (R4b) supplies a source WITHOUT cutting WU off |
 | `dism /RevertPendingActions` | offline images only, per Microsoft |
 | offline `dism`/`sfc` variants | this tool repairs the running OS |
 | `bcdboot` / `bootrec` / `mdsched` / `wsreset` | boot repair / reboot memory test / Store cache — out of corruption scope |
@@ -61,6 +63,8 @@ Every step: verified honestly, streamed live in color, written to a timestamped 
 wu-repair-cycle.exe               full cycle (self-elevates via UAC)
 wu-repair-cycle.exe --dry-run     print the complete matrix, execute NOTHING, exit 0
 wu-repair-cycle.exe --check-only  read-only status report (no admin, no changes)
+wu-repair-cycle.exe --source D:\Win11.iso          add a repair image (ISO mounted on demand)
+wu-repair-cycle.exe --source X:\sources\install.esd point at a WIM/ESD/SWM directly
 ```
 
 **Exit code `0` = every single command ran with zero errors.** Findings (deprecated-payload 0915 after an exhausted ladder, chkdsk exit 3 on data drives, DLL registration no-ops) are surfaced in the step detail — never silently counted as failures, never hidden.
@@ -87,8 +91,8 @@ Runtime: 20–120 minutes (DISM dominates). Reboot afterwards if the tool recomm
 
 ## Troubleshooting
 
-- **0915 "repair content could not be found"** — the ladder must exhaust (3 attempts). If it still reports 0915 afterwards, the step detail names the deprecated-components condition; SFC verifies whether system files are clean (they almost always are — the payloads belong to retired packages).
-- **`sfc /verifynow` substituted** — CBS rejects it in pending state; the tool verifies via `/scannow` and says so in the step.
+- **0915 "repair content could not be found"** — v2.1.0 fights it on three fronts: (1) the 3-attempt WU ladder, (2) **CBS log forensics** that name the exact payloads WU refused to serve (`CheckSur` download results), and (3) the **local-source ladder** which scans every drive for `install.wim`/`.esd`/`.swm` and Windows ISOs, mounts ISOs on demand, and feeds DISM the `/Source:` option it asks for — index matched to your running build/revision/edition. If no local image carries the exact pinned payloads (CBS pins revisions), the finding is documented and validated against SFC. The cure for a retired payload is an image of the **exact revision** (e.g. from UUP dump): download it and run with `--source <file>`.
+- **`sfc /verifyonly` blocked by pending CBS state** — only then does the tool substitute `/scannow`, and it says so in the step.
 - **`catroot2` / store "locked"** — harmless; it rebuilds itself.
 - **Services show "unknown" in `--check-only`** — non-elevated SCM queries are blocked on hardened hosts; the full run heals + verifies.
 - **Supplementary pagefile `C:\wufix-pagefile.sys`** — created only when commit is exhausted; delete via Virtual Memory settings if unwanted (requires reboot to release).

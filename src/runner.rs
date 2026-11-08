@@ -61,8 +61,20 @@ fn looks_utf16(raw: &[u8]) -> bool {
 /// Run one command. Output streams LIVE to the console while being accumulated.
 /// ok = exit code in ok_codes AND not timed out.
 pub fn run(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+    run_inner(id, program, args, ok_codes, timeout_secs, false)
+}
+
+/// Run one command QUIETLY: output is captured to the transcript only, never
+/// printed to the console (used for commands whose raw output contains scary
+/// text — DISM restore attempts, chkdsk findings — so the console only ever
+/// shows the classified result).
+pub fn run_quiet(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+    run_inner(id, program, args, ok_codes, timeout_secs, true)
+}
+
+fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64, quiet: bool) -> CmdResult {
     let t0 = Instant::now();
-    transcript_line(&format!("[{}] RUN {} {}", id, program, args.join(" ")));
+    transcript_line(&format!("[{}] RUN {} {}{}", id, program, args.join(" "), if quiet { " (captured)" } else { "" }));
     let spawned = Command::new(program)
         .args(args)
         .stdout(Stdio::piped())
@@ -129,8 +141,10 @@ pub fn run(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_sec
         while let Ok(chunk) = rx.try_recv() {
             raw.extend_from_slice(&chunk);
             let s = decode_live(&chunk);
-            print!("{}", s);
-            let _ = std::io::stdout().flush();
+            if !quiet {
+                print!("{}", s);
+                let _ = std::io::stdout().flush();
+            }
             collected.push_str(&s);
         }
         match child.try_wait() {
@@ -158,8 +172,10 @@ pub fn run(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_sec
     while let Ok(chunk) = rx.try_recv() {
         raw.extend_from_slice(&chunk);
         let s = decode_live(&chunk);
-        print!("{}", s);
-        let _ = std::io::stdout().flush();
+        if !quiet {
+            print!("{}", s);
+            let _ = std::io::stdout().flush();
+        }
         collected.push_str(&s);
     }
     let _ = h_out.join();

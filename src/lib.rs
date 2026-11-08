@@ -6,3 +6,4 @@ pub mod resume;
 pub mod wu_reset;
 pub mod repair;
 pub mod pause;
+pub mod source;
