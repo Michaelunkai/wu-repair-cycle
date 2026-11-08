@@ -79,8 +79,13 @@ pub fn run_quiet(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeo
 pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
     let mut r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
     let mut kills = 0usize;
-    // 0x40010004 (1073807364) is Windows' "process was closed/terminated" code
-    while (r.code < 0 || r.code == 1073807364) && kills < 3 {
+    // A run whose OUTPUT contains a real verdict (DISM printed the complete
+    // 0x800f0915 repair-content block) is a VERDICT even when the killer then
+    // terminated the process (exit -1): return it immediately — the
+    // classification layer must see it. Only verdict-less terminations
+    // (-1 / 0x40010004 with no verdict text) are retried.
+    let has_verdict = |o: &str| o.contains("0x800f0915") || o.contains("repair content could not be found");
+    while ((r.code == -1 || r.code == 1073807364) && !has_verdict(&r.output)) && kills < 3 {
         kills += 1;
         crate::ui::info(&format!(
             "{} was terminated externally (no verdict produced) - retrying ({}/3) after a pause...",
@@ -96,6 +101,9 @@ pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes:
     if kills > 0 && r.ok {
         r.output
             .push_str(&format!("\n[survived {} external termination(s) before completing]", kills));
+    }
+    if kills > 0 && !r.ok && has_verdict(&r.output) {
+        r.output.push_str("\n[final terminated run reproduced the verdict - see tail]");
     }
     r
 }

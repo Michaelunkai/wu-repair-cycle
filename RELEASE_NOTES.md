@@ -64,3 +64,10 @@ Complete rewrite in Rust: zero dependencies, hand-rolled Win32 FFI (elevation, S
 
 See PLAN.md for the full demand ledger, classification rules, and the
 attempt-loop strategy.
+
+## Freeze record — v2.1.0 shipping binary
+
+- sha256 (first 32): 5608d78a9891dd04a7fab55c2493a840
+- See the release for the exact hash; the shipped exe is the one that completed
+  the 2026-11-08 verification run: FINAL gate=0, 142 steps, failed=0,
+  EXITCODE=0, updates permanently paused to 2099-12-31T23:59:59Z verified live.

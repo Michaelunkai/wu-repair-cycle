@@ -1,0 +1,6 @@
+# This host's MSVC link.exe auto-location is flaky (Git Bash's coreutils
+# `link` sometimes shadows it). rust-lld links MSVC targets natively and is
+# bundled with the toolchain, so it is pinned here deterministically.
+[target.x86_64-pc-windows-msvc]
+linker = "C:\\Users\\Admin\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\lib\\rustlib\\x86_64-pc-windows-msvc\\bin\\rust-lld.exe"
+rustflags = ["-C", "linker-flavor=lld-link"]
