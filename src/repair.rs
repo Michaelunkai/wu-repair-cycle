@@ -607,7 +607,39 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             ui::warn("corruption persists - check CBS.log; final gate will report honestly");
         }
     }
-    if restore_exhausted_0915 && !sfc_clean {
+    ui::step("R6: SFC /verifyonly (verification pass - no repair)");
+    let mut verify_clean = false;
+    {
+        let (sv, _, _) = sfc_run("/verifyonly", 3600);
+        if sv.ok {
+            verify_clean = sv.detail.contains("no integrity violations");
+            ui::cmd_done(&sv);
+            steps.push(sv);
+        } else if sv.detail.contains("pending") || sv.detail.contains("reboot needed") {
+            ui::warn("verifyonly blocked by pending CBS state - verifying via /scannow instead");
+            let (sb, repaired_b, _) = sfc_run("/scannow", 5400);
+            if repaired_b {
+                reboot = true;
+            }
+            verify_clean = sb.ok && sb.detail.contains("no integrity violations");
+            let sub = Step::new(
+                "sfc-verifyonly",
+                "sfc /verifyonly (blocked by pending CBS) -> verified via /scannow",
+                sb.ok,
+                &format!("pending-CBS substitution: scannow reports {}", sb.detail),
+                sb.secs,
+            );
+            ui::cmd_done(&sub);
+            steps.push(sub);
+        } else {
+            ui::cmd_done(&sv);
+            steps.push(sv);
+        }
+    }
+    // The 0x800f0915 finding only stands when system files are proven clean by
+    // either the scannow or the verification pass (a transient WRP refusal in
+    // R5 must not poison the finding when R6 proves the system clean).
+    if restore_exhausted_0915 && !(sfc_clean || verify_clean) {
         // finding only stands when system files are proven clean; otherwise
         // mark the classified restore step as failed retroactively via a note
         steps.push(Step::new(
@@ -625,33 +657,6 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             "SFC verified zero integrity violations - the system files are clean; the missing payloads are pinned component revisions not offered by Windows Update nor present in any local image",
             0.0,
         ));
-    }
-
-    ui::step("R6: SFC /verifyonly (verification pass - no repair)");
-    {
-        let (sv, _, _) = sfc_run("/verifyonly", 3600);
-        if sv.ok {
-            ui::cmd_done(&sv);
-            steps.push(sv);
-        } else if sv.detail.contains("pending") || sv.detail.contains("reboot needed") {
-            ui::warn("verifyonly blocked by pending CBS state - verifying via /scannow instead");
-            let (sb, repaired_b, _) = sfc_run("/scannow", 5400);
-            if repaired_b {
-                reboot = true;
-            }
-            let sub = Step::new(
-                "sfc-verifyonly",
-                "sfc /verifyonly (blocked by pending CBS) -> verified via /scannow",
-                sb.ok,
-                &format!("pending-CBS substitution: scannow reports {}", sb.detail),
-                sb.secs,
-            );
-            ui::cmd_done(&sub);
-            steps.push(sub);
-        } else {
-            ui::cmd_done(&sv);
-            steps.push(sv);
-        }
     }
 
     ui::step("R7: chkdsk /scan on every fixed drive (online - never dismounts)");

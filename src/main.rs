@@ -25,7 +25,10 @@ fn main() {
         } else if let Some(v) = a.strip_prefix("--source=") {
             explicit_source = Some(v.to_string());
         } else if a != "--check-only" && a != "--dry-run" && a != "--pause-only" {
-            eprintln!("unknown argument '{}'; refusing to start a full run (try --help)", a);
+            eprintln!(
+                "unknown argument '{}'; refusing to start a full run (try --help)",
+                a
+            );
             std::process::exit(2);
         }
     }
