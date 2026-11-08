@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 fn dism(id: &str, op: &str, ok: &[i32], timeout: u64) -> Step {
     let args = ["/Online", "/Cleanup-Image", op];
-    let r = runner::run(id, "dism.exe", &args, ok, timeout);
+    let r = runner::run_steady(false, id, "dism.exe", &args, ok, timeout);
     let s: Step = r.into();
     ui::cmd_done(&s);
     s
@@ -32,7 +32,7 @@ fn dism(id: &str, op: &str, ok: &[i32], timeout: u64) -> Step {
 
 fn sfc_run(flag: &str, timeout: u64) -> (Step, bool, bool) {
     let id = format!("sfc-{}", flag.trim_start_matches('/'));
-    let r = runner::run(&id, "sfc.exe", &[flag], &[0], timeout);
+    let r = runner::run_steady(false, &id, "sfc.exe", &[flag], &[0], timeout);
     let out = &r.output;
     // SFC prints its usage banner (which contains /VERIFYFILE) when handed an
     // invalid switch - normal run output never contains that string.
@@ -269,12 +269,14 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     let mut restore_exhausted_0915 = false;
     let mut restore_succeeded = false;
     let mut source_repaired = false;
+    let mut was_0915_seen = false;
     for attempt in 1..=3i32 {
         ui::info(&format!(
             "RestoreHealth attempt {} of 3 running (up to 90 min, output captured to transcript)...",
             attempt
         ));
-        let r = runner::run_quiet(
+        let r = runner::run_steady(
+            true,
             &format!("dism-restore-{}", attempt),
             "dism.exe",
             &["/Online", "/Cleanup-Image", "/RestoreHealth"],
@@ -282,6 +284,9 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             5400,
         );
         let was_0915 = r.output.contains("0x800f0915") || r.output.contains("repair content");
+        if was_0915 {
+            was_0915_seen = true;
+        }
         runner::transcript_line(&format!(
             "[dism-restore-{}] raw outcome noted: exit {} ({:.0}s)",
             attempt, r.code, r.secs
@@ -296,7 +301,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             restore_succeeded = true;
             break;
         }
-        if was_0915 && attempt == 3 {
+        // a 0915 verdict anywhere in the ladder + no success + attempts exhausted
+        // = the documented deprecated-payload finding (the killed attempt produced
+        // no verdict, so the 0915 verdicts stand for the ladder's outcome)
+        if attempt == 3 && !ok && was_0915_seen {
             restore_exhausted_0915 = true;
         }
         if attempt < 3 {
@@ -406,7 +414,8 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                         runs += 1;
                         let arg = crate::source::source_arg(src.kind, &img, ix);
                         ui::info(&format!("local-source restore attempt {} (output captured to transcript)...", runs));
-                        let r = runner::run_quiet(
+                        let r = runner::run_steady(
+                            true,
                             &format!("dism-restore-src-{}", runs),
                             "dism.exe",
                             &["/Online", "/Cleanup-Image", "/RestoreHealth", &arg],
@@ -573,7 +582,7 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     for d in &drives {
         let id = format!("chkdsk-{}-scan", d);
         ui::info(&format!("chkdsk {}: scanning (up to 60 min, output captured to transcript)...", d));
-        let r = runner::run_quiet(&id, "chkdsk.exe", &[d, "/scan"], &[0, 1, 2, 3], 3600);
+        let r = runner::run_steady(true, &id, "chkdsk.exe", &[d, "/scan"], &[0, 1, 2, 3], 3600);
         match r.code {
             3 => {
                 if *d == sysdrive {
@@ -582,7 +591,8 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                     // chkdsk exits 3 after scheduling (not fixed in place) - verified
                     // by the "will be checked" text in the output.
                     let cmdstr = format!("echo Y| chkdsk {} /spotfix", d);
-                    let r2 = runner::run_quiet(
+                    let r2 = runner::run_steady(
+                        true,
                         &format!("chkdsk-{}-spotfix-schedule", d),
                         "cmd.exe",
                         &["/c", &cmdstr],
@@ -637,7 +647,7 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     ui::step("R10: DISM SPSuperseded (no-op on modern images is classified OK)");
     {
         let args = ["/Online", "/Cleanup-Image", "/SPSuperseded"];
-        let r = runner::run_quiet("dism-spsuperseded", "dism.exe", &args, &[0, 3010], 3600);
+        let r = runner::run_steady(true, "dism-spsuperseded", "dism.exe", &args, &[0, 3010], 3600);
         let ok = r.ok || r.code == 50 || r.output.contains("not supported");
         let detail = if r.ok {
             format!("exit {}", r.code)
@@ -652,7 +662,7 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     ui::step("R11: final verification (CheckHealth + verifyonly)");
     {
         let args = ["/Online", "/Cleanup-Image", "/CheckHealth"];
-        let r = runner::run("dism-checkhealth-final", "dism.exe", &args, &[0], 300);
+        let r = runner::run_steady(false, "dism-checkhealth-final", "dism.exe", &args, &[0], 300);
         let corrupt = r.output.contains("repairable") || r.output.contains("corruption detected");
         let s = Step::new(
             "dism-checkhealth-final",

@@ -72,6 +72,34 @@ pub fn run_quiet(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeo
     run_inner(id, program, args, ok_codes, timeout_secs, true)
 }
 
+/// Run with kill-resilience: on this host, repair processes are sometimes
+/// terminated externally (exit -1 / negative codes, no crash record). A
+/// terminated process produced NO verdict - retry instead of failing. The
+/// final result notes any external terminations it survived.
+pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+    let mut r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
+    let mut kills = 0usize;
+    // 0x40010004 (1073807364) is Windows' "process was closed/terminated" code
+    while (r.code < 0 || r.code == 1073807364) && kills < 3 {
+        kills += 1;
+        crate::ui::info(&format!(
+            "{} was terminated externally (no verdict produced) - retrying ({}/3) after a pause...",
+            id, kills
+        ));
+        transcript_line(&format!(
+            "[{}] externally terminated (exit {}) - retrying ({} of 3)",
+            id, r.code, kills
+        ));
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
+    }
+    if kills > 0 && r.ok {
+        r.output
+            .push_str(&format!("\n[survived {} external termination(s) before completing]", kills));
+    }
+    r
+}
+
 fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64, quiet: bool) -> CmdResult {
     let t0 = Instant::now();
     transcript_line(&format!("[{}] RUN {} {}{}", id, program, args.join(" "), if quiet { " (captured)" } else { "" }));

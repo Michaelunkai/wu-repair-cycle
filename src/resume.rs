@@ -292,6 +292,36 @@ pub fn run() -> Vec<Step> {
         }
     }
     std::thread::sleep(std::time::Duration::from_secs(3));
+
+    // INSTALL SUPPRESSION for the repair window: auto-installs (queued OS
+    // updates + Store apps) hammer the already-unstable servicing stack and
+    // can crash/restart the machine mid-repair. DISM fetches repair payloads
+    // DIRECTLY (bypassing these policies), so suppressing auto-install costs
+    // nothing to the repairs while keeping the PC stable. Phase 3 locks it in
+    // permanently anyway.
+    ui::step("Suppressing auto-installs for the repair window (prevents servicing-stack crashes and forced restarts)");
+    let sup: [(&str, &str, &str, u32, &str); 4] = [
+        (AU_POL, "NoAutoUpdate", "automatic detection/install off during repairs", 1, "resume-sup-NoAutoUpdate"),
+        (AU_POL, "AUOptions", "notify-only option during repairs", 2, "resume-sup-AUOptions"),
+        (AU_POL, "NoAutoRebootWithLoggedOnUsers", "never force-restart while a user is logged on", 1, "resume-sup-NoAutoReboot"),
+        ("SOFTWARE\\Policies\\Microsoft\\WindowsStore", "AutoDownload", "no auto-download/install of Store apps during repairs", 2, "resume-sup-StoreAutoDownload"),
+    ];
+    for (path, name, what, val, id) in sup {
+        let t = Instant::now();
+        let ok = winapi::reg_set_dword(path, name, val);
+        steps.push(Step::new(
+            id,
+            &format!("set {}\\{} = {}", path.rsplit('\\').next().unwrap_or(path), name, val),
+            ok,
+            &format!("{}{}", if ok { "suppressed: " } else { "FAILED: " }, what),
+            t.elapsed().as_secs_f64(),
+        ));
+        if ok {
+            ui::ok(&format!("{} suppressed", what));
+        } else {
+            ui::err(&format!("could not suppress: {}", what));
+        }
+    }
     steps
 }
 

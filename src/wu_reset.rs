@@ -144,8 +144,8 @@ pub fn reset_components() -> Vec<Step> {
     // A fresh empty store cannot serve RestoreHealth: trigger a real WU detection
     // scan and wait for the datastore to rebuild before any DISM repair runs.
     ui::info("triggering Windows Update detection (fresh store sync)");
-    let _ = runner::run_quiet("wu-trigger-usoclient", "UsoClient.exe", &["StartScan"], &[0], 120);
-    let _ = runner::run_quiet(
+    let _ = runner::run_steady(true, "wu-trigger-usoclient", "UsoClient.exe", &["StartScan"], &[0], 120);
+    let _ = runner::run_steady(true, 
         "wu-trigger-detectnow",
         "powershell.exe",
         &["-NoProfile", "-Command", "(New-Object -ComObject Microsoft.Update.AutoUpdate).DetectNow()"],
@@ -188,7 +188,7 @@ pub fn re_register_dlls() -> Vec<Step> {
             continue;
         }
         let path_str = p.to_string_lossy().to_string();
-        let r = runner::run_quiet(
+        let r = runner::run_steady(true, 
             &format!("dll-reg-{}", d),
             "regsvr32.exe",
             &["/s", &path_str],

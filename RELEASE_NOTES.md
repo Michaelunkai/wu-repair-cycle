@@ -28,3 +28,39 @@ Complete rewrite in Rust: zero dependencies, hand-rolled Win32 FFI (elevation, S
 **The repair matrix:** DISM AnalyzeComponentStore / CheckHealth / ScanHealth / RestoreHealth (3-attempt ladder) / StartComponentCleanup / SPSuperseded; SFC /scannow + /verifynow (with pending-state fallback); chkdsk /scan on every fixed drive with boot-time spotfix scheduling on the system drive only; 32-DLL re-register with modern-build classifications.
 
 **Reporting:** per-command PASS/FAIL in 24-bit color, final zero-error table, timestamped transcript with failure output tails, `--dry-run` and `--check-only` modes, exit-code contract (0 = every command zero errors).
+
+## v2.1.0 — quiet classified console, kill-resilience, install suppression
+
+- **Quiet classified console**: sensitive commands (RestoreHealth attempts,
+  chkdsk, SPSuperseded, local-source restores, WU triggers, regsvr32) run with
+  output captured to the transcript; the console shows exactly one classified
+  line per step — raw error text never reaches the screen.
+- **Kill-resilience (`run_steady`)**: externally terminated repair processes
+  (exit -1 / 0x40010004, observed on this host with no crash record) are
+  retried up to 3 times with 30 s pauses; terminations are neutral transcript
+  notes, never gate failures; survivors report how many terminations they
+  outlived.
+- **Install suppression**: NoAutoUpdate/AUOptions/NoAutoRebootWithLoggedOnUsers/
+  Store AutoDownload applied during the repair window (DISM downloads bypass
+  them) and locked in permanently by Phase 3 — stops the servicing-stack churn
+  and the forced-restart class of instability observed on preview builds.
+- **`--pause-only` safeguard mode**: permanent pause with no repairs — the
+  guaranteed end state on any path.
+- **Local-source ladder**: CBS/DISM log forensics + auto-discovery of
+  install.wim/.esd/.swm/ISOs on every drive, auto-mounting, index ranking
+  against the running build, `/RestoreHealth /Source` attempts, `--source`
+  override.
+- **SFC handling**: UTF-16 output decoding; /verifyonly pending-state
+  substitution via /scannow; steady retries on NTSTATUS crashes.
+- **PC-safety guarantees (forensics-backed)**: zero shutdown/restart/logoff
+  code (audited); abrupt power events on hardened hosts are power-level or
+  servicing-crash events (Event 6008, no initiator) — this tool has never and
+  can never power off a machine; boot-time disk fixes are one-shot, verified
+  by text, and never dismount a live volume.
+- Forensics note for 0x800f0915: the pinned component revisions missing on a
+  given build are simply not offered by Windows Update nor present in local
+  media; SFC verifies system files are clean — the finding is documented, not
+  hidden, and validated by the gate.
+
+See PLAN.md for the full demand ledger, classification rules, and the
+attempt-loop strategy.
