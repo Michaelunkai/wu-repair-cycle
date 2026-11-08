@@ -22,7 +22,11 @@ fn mirror_file() -> &'static Option<std::path::PathBuf> {
 
 fn mirror_line(s: &str) {
     if let Some(p) = mirror_file() {
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+        {
             let _ = std::io::Write::write_all(&mut f, format!("{}\n", s).as_bytes());
         }
     }
@@ -71,7 +75,7 @@ fn dim(s: &str) -> String {
 }
 
 fn rule(ch: &str) {
-    let line: String = std::iter::repeat(ch).take(74).collect();
+    let line: String = ch.repeat(74);
     out(&cyan(&line));
 }
 
@@ -115,7 +119,7 @@ pub fn wait_steps(total_secs: u64, label: &str) {
     for _ in 0..total_secs {
         std::thread::sleep(std::time::Duration::from_secs(1));
         since += 1;
-        if since % 10 == 0 {
+        if since.is_multiple_of(10) {
             heartbeat(&format!("{} — {}s of {}s", label, since, total_secs));
         }
     }
@@ -123,11 +127,7 @@ pub fn wait_steps(total_secs: u64, label: &str) {
 
 /// One line per executed command — the live heart of the output.
 pub fn cmd_done(s: &Step) {
-    let status = if s.ok {
-        green(&format!("PASS",))
-    } else {
-        red("FAIL")
-    };
+    let status = if s.ok { green("PASS") } else { red("FAIL") };
     out(&format!(
         "  {} {}{}  {}  {}  {}",
         status,
@@ -145,11 +145,7 @@ pub fn summary(steps: &[Step], elapsed_secs: u64, reboot: bool) {
     out("");
     let id_w = steps.iter().map(|s| s.id.len()).max().unwrap_or(4).max(4);
     for s in steps {
-        let status = if s.ok {
-            green("PASS")
-        } else {
-            red("FAIL")
-        };
+        let status = if s.ok { green("PASS") } else { red("FAIL") };
         out(&format!(
             "  {} {:<id_w$}  {:>6.1}s  {}",
             status,
@@ -180,9 +176,16 @@ pub fn summary(steps: &[Step], elapsed_secs: u64, reboot: bool) {
             )))
         ));
     }
-    out(&format!("  Runtime: {}m {:02}s", elapsed_secs / 60, elapsed_secs % 60));
+    out(&format!(
+        "  Runtime: {}m {:02}s",
+        elapsed_secs / 60,
+        elapsed_secs % 60
+    ));
     if reboot {
-        out(&format!("  {}", yellow("REBOOT RECOMMENDED — repairs completed that need it.")));
+        out(&format!(
+            "  {}",
+            yellow("REBOOT RECOMMENDED — repairs completed that need it.")
+        ));
     }
     out("");
 }

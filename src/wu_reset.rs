@@ -10,15 +10,48 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 pub const DLLS: [&str; 32] = [
-    "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll", "jscript.dll",
-    "vbscript.dll", "scrrun.dll", "msxml.dll", "msxml3.dll", "msxml6.dll", "actxprxy.dll",
-    "softpub.dll", "wintrust.dll", "dssenh.dll", "rsaenh.dll", "gpkcsp.dll", "sccbase.dll",
-    "slbcsp.dll", "cryptdlg.dll", "oleaut32.dll", "ole32.dll", "shell32.dll", "initpki.dll",
-    "qmgr.dll", "qmgrprxy.dll", "wuaueng.dll", "wucltux.dll", "wuapi.dll", "wups.dll",
-    "wups2.dll", "wuwebv.dll",
+    "atl.dll",
+    "urlmon.dll",
+    "mshtml.dll",
+    "shdocvw.dll",
+    "browseui.dll",
+    "jscript.dll",
+    "vbscript.dll",
+    "scrrun.dll",
+    "msxml.dll",
+    "msxml3.dll",
+    "msxml6.dll",
+    "actxprxy.dll",
+    "softpub.dll",
+    "wintrust.dll",
+    "dssenh.dll",
+    "rsaenh.dll",
+    "gpkcsp.dll",
+    "sccbase.dll",
+    "slbcsp.dll",
+    "cryptdlg.dll",
+    "oleaut32.dll",
+    "ole32.dll",
+    "shell32.dll",
+    "initpki.dll",
+    "qmgr.dll",
+    "qmgrprxy.dll",
+    "wuaueng.dll",
+    "wucltux.dll",
+    "wuapi.dll",
+    "wups.dll",
+    "wups2.dll",
+    "wuwebv.dll",
 ];
 
-const STOP_LIST: [&str; 6] = ["wuauserv", "bits", "cryptsvc", "dosvc", "UsoSvc", "msiserver"];
+const STOP_LIST: [&str; 6] = [
+    "wuauserv",
+    "bits",
+    "cryptsvc",
+    "dosvc",
+    "UsoSvc",
+    "msiserver",
+];
 const START_LIST: [&str; 5] = ["cryptsvc", "bits", "dosvc", "wuauserv", "UsoSvc"];
 
 fn windir() -> PathBuf {
@@ -65,7 +98,13 @@ fn rename_with_fallback(src: &PathBuf, tag: &str) -> Result<String, String> {
     let mut last_err = String::new();
     for attempt in 1..=3 {
         match std::fs::rename(src, &dst) {
-            Ok(()) => return Ok(dst.file_name().unwrap_or_default().to_string_lossy().to_string()),
+            Ok(()) => {
+                return Ok(dst
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string())
+            }
             Err(e) => {
                 last_err = e.to_string();
                 if !src.exists() {
@@ -108,7 +147,13 @@ pub fn reset_components() -> Vec<Step> {
             &format!("reset-stop-{}", s),
             &format!("stop + verify {}", s),
             ok,
-            if deferred { "installer busy - left running (not needed for store reset; harmless)" } else if ok { "STOPPED (verified)" } else { "still running (may block rename)" },
+            if deferred {
+                "installer busy - left running (not needed for store reset; harmless)"
+            } else if ok {
+                "STOPPED (verified)"
+            } else {
+                "still running (may block rename)"
+            },
             t.elapsed().as_secs_f64(),
         ));
     }
@@ -118,13 +163,25 @@ pub fn reset_components() -> Vec<Step> {
     let t = Instant::now();
     match rename_with_fallback(&sd, "old") {
         Ok(name) => {
-            steps.push(Step::new("reset-rename-SoftwareDistribution", "rename SoftwareDistribution", true, &format!("-> {}", name), t.elapsed().as_secs_f64()));
+            steps.push(Step::new(
+                "reset-rename-SoftwareDistribution",
+                "rename SoftwareDistribution",
+                true,
+                &format!("-> {}", name),
+                t.elapsed().as_secs_f64(),
+            ));
             ui::ok(&format!("SoftwareDistribution -> {}", name));
         }
         Err(_) => {
             // In-use store (e.g. TiWorker mid-repair) is NOT a failure: the
             // existing, already-synced store serves RestoreHealth just as well.
-            steps.push(Step::new("reset-rename-SoftwareDistribution", "rename SoftwareDistribution", true, "locked - keeping the existing synced store (harmless)", t.elapsed().as_secs_f64()));
+            steps.push(Step::new(
+                "reset-rename-SoftwareDistribution",
+                "rename SoftwareDistribution",
+                true,
+                "locked - keeping the existing synced store (harmless)",
+                t.elapsed().as_secs_f64(),
+            ));
             ui::warn("SoftwareDistribution locked - keeping the existing synced store (harmless)");
         }
     }
@@ -133,12 +190,24 @@ pub fn reset_components() -> Vec<Step> {
     let t = Instant::now();
     match rename_with_fallback(&cr, "old") {
         Ok(name) => {
-            steps.push(Step::new("reset-rename-catroot2", "rename catroot2", true, &format!("-> {}", name), t.elapsed().as_secs_f64()));
+            steps.push(Step::new(
+                "reset-rename-catroot2",
+                "rename catroot2",
+                true,
+                &format!("-> {}", name),
+                t.elapsed().as_secs_f64(),
+            ));
             ui::ok(&format!("catroot2 -> {}", name));
         }
         Err(_) => {
             // locked catroot2 is harmless: it rebuilds itself; NOT an error condition
-            steps.push(Step::new("reset-rename-catroot2", "rename catroot2", true, "locked - harmless, rebuilds itself", t.elapsed().as_secs_f64()));
+            steps.push(Step::new(
+                "reset-rename-catroot2",
+                "rename catroot2",
+                true,
+                "locked - harmless, rebuilds itself",
+                t.elapsed().as_secs_f64(),
+            ));
             ui::warn("catroot2 locked - harmless, it rebuilds itself");
         }
     }
@@ -160,17 +229,33 @@ pub fn reset_components() -> Vec<Step> {
     // A fresh empty store cannot serve RestoreHealth: trigger a real WU detection
     // scan and wait for the datastore to rebuild before any DISM repair runs.
     ui::info("triggering Windows Update detection (fresh store sync)");
-    let _ = runner::run_steady(true, "wu-trigger-usoclient", "UsoClient.exe", &["StartScan"], &[0], 120);
-    let _ = runner::run_steady(true, 
+    let _ = runner::run_steady(
+        true,
+        "wu-trigger-usoclient",
+        "UsoClient.exe",
+        &["StartScan"],
+        &[0],
+        120,
+    );
+    let _ = runner::run_steady(
+        true,
         "wu-trigger-detectnow",
         "powershell.exe",
-        &["-NoProfile", "-Command", "(New-Object -ComObject Microsoft.Update.AutoUpdate).DetectNow()"],
+        &[
+            "-NoProfile",
+            "-Command",
+            "(New-Object -ComObject Microsoft.Update.AutoUpdate).DetectNow()",
+        ],
         &[0],
         120,
     );
     let ds = windir().join("SoftwareDistribution\\DataStore\\DataStore.edb");
     let (present, waited) = winapi::wait_datastore(&ds, 180);
-    let ds_state = if present { "present" } else { "absent (continuing anyway)" };
+    let ds_state = if present {
+        "present"
+    } else {
+        "absent (continuing anyway)"
+    };
     steps.push(Step::new(
         "reset-wait-store",
         "wait for fresh WU datastore to rebuild",
@@ -197,7 +282,8 @@ pub fn re_register_dlls() -> Vec<Step> {
             continue;
         }
         let path_str = p.to_string_lossy().to_string();
-        let r = runner::run_steady(true, 
+        let r = runner::run_steady(
+            true,
             &format!("dll-reg-{}", d),
             "regsvr32.exe",
             &["/s", &path_str],
@@ -227,7 +313,12 @@ pub fn re_register_dlls() -> Vec<Step> {
         "dll-reg-summary",
         &label,
         true,
-        &format!("registered: {}, classified no-op (4/5): {}, missing/skipped: {}", DLLS.len() - missing - noop, noop, missing),
+        &format!(
+            "registered: {}, classified no-op (4/5): {}, missing/skipped: {}",
+            DLLS.len() - missing - noop,
+            noop,
+            missing
+        ),
         0.0,
     ));
     ui::ok(&format!(

@@ -32,7 +32,11 @@ fn log_path() -> &'static PathBuf {
 }
 
 pub fn transcript_line(s: &str) {
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path()) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path())
+    {
         let _ = writeln!(f, "{}", s);
     }
 }
@@ -60,7 +64,13 @@ fn looks_utf16(raw: &[u8]) -> bool {
 
 /// Run one command. Output streams LIVE to the console while being accumulated.
 /// ok = exit code in ok_codes AND not timed out.
-pub fn run(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+pub fn run(
+    id: &str,
+    program: &str,
+    args: &[&str],
+    ok_codes: &[i32],
+    timeout_secs: u64,
+) -> CmdResult {
     run_inner(id, program, args, ok_codes, timeout_secs, false)
 }
 
@@ -68,7 +78,13 @@ pub fn run(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_sec
 /// printed to the console (used for commands whose raw output contains scary
 /// text — DISM restore attempts, chkdsk findings — so the console only ever
 /// shows the classified result).
-pub fn run_quiet(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+pub fn run_quiet(
+    id: &str,
+    program: &str,
+    args: &[&str],
+    ok_codes: &[i32],
+    timeout_secs: u64,
+) -> CmdResult {
     run_inner(id, program, args, ok_codes, timeout_secs, true)
 }
 
@@ -76,7 +92,14 @@ pub fn run_quiet(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeo
 /// terminated externally (exit -1 / negative codes, no crash record). A
 /// terminated process produced NO verdict - retry instead of failing. The
 /// final result notes any external terminations it survived.
-pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64) -> CmdResult {
+pub fn run_steady(
+    quiet: bool,
+    id: &str,
+    program: &str,
+    args: &[&str],
+    ok_codes: &[i32],
+    timeout_secs: u64,
+) -> CmdResult {
     let mut r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
     let mut kills = 0usize;
     // A run whose OUTPUT contains a real verdict (DISM printed the complete
@@ -84,7 +107,8 @@ pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes:
     // terminated the process (exit -1): return it immediately — the
     // classification layer must see it. Only verdict-less terminations
     // (-1 / 0x40010004 with no verdict text) are retried.
-    let has_verdict = |o: &str| o.contains("0x800f0915") || o.contains("repair content could not be found");
+    let has_verdict =
+        |o: &str| o.contains("0x800f0915") || o.contains("repair content could not be found");
     while ((r.code == -1 || r.code == 1073807364) && !has_verdict(&r.output)) && kills < 3 {
         kills += 1;
         crate::ui::info(&format!(
@@ -99,18 +123,34 @@ pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes:
         r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
     }
     if kills > 0 && r.ok {
-        r.output
-            .push_str(&format!("\n[survived {} external termination(s) before completing]", kills));
+        r.output.push_str(&format!(
+            "\n[survived {} external termination(s) before completing]",
+            kills
+        ));
     }
     if kills > 0 && !r.ok && has_verdict(&r.output) {
-        r.output.push_str("\n[final terminated run reproduced the verdict - see tail]");
+        r.output
+            .push_str("\n[final terminated run reproduced the verdict - see tail]");
     }
     r
 }
 
-fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_secs: u64, quiet: bool) -> CmdResult {
+fn run_inner(
+    id: &str,
+    program: &str,
+    args: &[&str],
+    ok_codes: &[i32],
+    timeout_secs: u64,
+    quiet: bool,
+) -> CmdResult {
     let t0 = Instant::now();
-    transcript_line(&format!("[{}] RUN {} {}{}", id, program, args.join(" "), if quiet { " (captured)" } else { "" }));
+    transcript_line(&format!(
+        "[{}] RUN {} {}{}",
+        id,
+        program,
+        args.join(" "),
+        if quiet { " (captured)" } else { "" }
+    ));
     let spawned = Command::new(program)
         .args(args)
         .stdout(Stdio::piped())
@@ -201,7 +241,11 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
                 "{} — {}s elapsed — {}",
                 id,
                 t0.elapsed().as_secs(),
-                if last_progress.is_empty() { "working..." } else { &last_progress }
+                if last_progress.is_empty() {
+                    "working..."
+                } else {
+                    &last_progress
+                }
             ));
             last_beat = Instant::now();
         }
@@ -250,9 +294,15 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
     // some tools (sfc.exe) emit UTF-16LE through the pipe: re-decode the whole
     // output when it looks like UTF-16 so text classification works correctly
     if looks_utf16(&raw) {
-        let units: Vec<u16> = raw.chunks(2).filter(|c| c.len() == 2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let units: Vec<u16> = raw
+            .chunks(2)
+            .filter(|c| c.len() == 2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
         let decoded = String::from_utf16_lossy(&units);
-        if decoded.chars().filter(|c| *c != '\0').count() > collected.chars().filter(|c| *c != '\0').count() / 2 {
+        if decoded.chars().filter(|c| *c != '\0').count()
+            > collected.chars().filter(|c| *c != '\0').count() / 2
+        {
             collected = decoded;
         }
     }
@@ -265,8 +315,20 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
     ));
     if !ok {
         // capture the tail of the output for post-mortem (hidden runs)
-        let tail: String = collected.chars().rev().take(400).collect::<Vec<_>>().chunks(1).rev().map(|c| c[0]).collect();
-        transcript_line(&format!("[{}] OUTPUT-TAIL: {}", id, tail.replace('\n', " | ").replace('\r', "")));
+        let tail: String = collected
+            .chars()
+            .rev()
+            .take(400)
+            .collect::<Vec<_>>()
+            .chunks(1)
+            .rev()
+            .map(|c| c[0])
+            .collect();
+        transcript_line(&format!(
+            "[{}] OUTPUT-TAIL: {}",
+            id,
+            tail.replace('\n', " | ").replace('\r', "")
+        ));
     }
     CmdResult {
         id: id.to_string(),
@@ -290,7 +352,9 @@ impl From<CmdResult> for Step {
                 .output
                 .lines()
                 .rev()
-                .find(|l| l.contains("Error") || l.contains("error") || l.contains("0x") || l.len() > 12)
+                .find(|l| {
+                    l.contains("Error") || l.contains("error") || l.contains("0x") || l.len() > 12
+                })
                 .unwrap_or("")
                 .trim();
             let short: String = interesting.chars().take(140).collect();

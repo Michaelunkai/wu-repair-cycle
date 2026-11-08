@@ -21,7 +21,6 @@ use crate::wu_reset;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-
 fn dism(id: &str, op: &str, ok: &[i32], timeout: u64) -> Step {
     let args = ["/Online", "/Cleanup-Image", op];
     let r = runner::run_steady(false, id, "dism.exe", &args, ok, timeout);
@@ -54,7 +53,8 @@ fn sfc_run(flag: &str, timeout: u64) -> (Step, bool, bool) {
     } else if pending {
         "CBS has pending repairs - reboot needed before SFC can verify".to_string()
     } else if refused {
-        "SFC refused to run (WRP conflict - usually CBS mid-transaction); retry scheduled".to_string()
+        "SFC refused to run (WRP conflict - usually CBS mid-transaction); retry scheduled"
+            .to_string()
     } else if cannot {
         "found corruption it could NOT fix".to_string()
     } else if repaired {
@@ -109,7 +109,10 @@ fn log_forensics_step() -> Step {
     } else if relevant.is_empty() {
         "no 0x800f0915 forensics lines found in DISM/CBS logs (possibly rotated)".to_string()
     } else {
-        format!("{} CBS/DISM forensics lines captured to transcript", relevant.len())
+        format!(
+            "{} CBS/DISM forensics lines captured to transcript",
+            relevant.len()
+        )
     };
     Step::new(
         "dism-log-forensics",
@@ -131,7 +134,16 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             runner::run(
                 "net-probe",
                 "curl.exe",
-                &["-s", "-o", "NUL", "-w", "%{http_code}", "--max-time", "15", url],
+                &[
+                    "-s",
+                    "-o",
+                    "NUL",
+                    "-w",
+                    "%{http_code}",
+                    "--max-time",
+                    "15",
+                    url,
+                ],
                 &[0],
                 30,
             )
@@ -143,7 +155,13 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
         let c2 = probe("https://www.msftconnecttest.com/connecttest.txt"); // TLS path (fails on TLS-intercepting networks)
         let c3 = probe("http://download.windowsupdate.com/"); // the repair-payload CDN
         let ok = c1 == "200" && !c3.is_empty() && c3 != "000";
-        let d = |c: &String| if c.is_empty() { "<none>".to_string() } else { c.clone() };
+        let d = |c: &String| {
+            if c.is_empty() {
+                "<none>".to_string()
+            } else {
+                c.clone()
+            }
+        };
         let s = Step::new(
             "net-connectivity",
             "curl NCSI + Windows Update CDN (repair-payload download path)",
@@ -159,7 +177,9 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
         ui::cmd_done(&s);
         steps.push(s);
         if !ok {
-            ui::warn("internet looks unreachable - WU-based RestoreHealth will not find repair content");
+            ui::warn(
+                "internet looks unreachable - WU-based RestoreHealth will not find repair content",
+            );
         }
     }
 
@@ -319,7 +339,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             for b in between.drain(..) {
                 steps.push(b);
             }
-            ui::wait_steps(60, "settling before the next RestoreHealth attempt (CBS needs the pause)");
+            ui::wait_steps(
+                60,
+                "settling before the next RestoreHealth attempt (CBS needs the pause)",
+            );
         }
     }
     if restore_succeeded {
@@ -359,7 +382,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
         ui::step("R4b: RestoreHealth via LOCAL image source (the /Source option)");
         src_steps.push(log_forensics_step());
         let (os_build, os_ubr, os_edition) = crate::source::os_identity();
-        ui::info(&format!("running OS: build {}.{} edition {}", os_build, os_ubr, os_edition));
+        ui::info(&format!(
+            "running OS: build {}.{} edition {}",
+            os_build, os_ubr, os_edition
+        ));
         let sources = crate::source::discover(explicit_source);
         if sources.is_empty() {
             src_steps.push(Step::new(
@@ -392,7 +418,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                                 }
                             }
                             if !hit {
-                                ui::warn(&format!("{}: no \\sources\\install.* inside - not a Windows image", letter));
+                                ui::warn(&format!(
+                                    "{}: no \\sources\\install.* inside - not a Windows image",
+                                    letter
+                                ));
                             }
                         } else {
                             ui::warn("mount failed - skipping this ISO");
@@ -408,14 +437,18 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                     if indexes.is_empty() {
                         continue;
                     }
-                    let ranked = crate::source::rank_indexes(&indexes, os_build, os_ubr, &os_edition);
+                    let ranked =
+                        crate::source::rank_indexes(&indexes, os_build, os_ubr, &os_edition);
                     for ix in ranked.into_iter().take(2) {
                         if runs >= 3 {
                             break 'outer;
                         }
                         runs += 1;
                         let arg = crate::source::source_arg(src.kind, &img, ix);
-                        ui::info(&format!("local-source restore attempt {} (output captured to transcript)...", runs));
+                        ui::info(&format!(
+                            "local-source restore attempt {} (output captured to transcript)...",
+                            runs
+                        ));
                         let r = runner::run_steady(
                             true,
                             &format!("dism-restore-src-{}", runs),
@@ -468,7 +501,11 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                     "src-unmount",
                     "dismount the ISOs this tool mounted itself",
                     true,
-                    &format!("{} of {} self-mounted ISO(s) dismounted", dismounted, mounted.len()),
+                    &format!(
+                        "{} of {} self-mounted ISO(s) dismounted",
+                        dismounted,
+                        mounted.len()
+                    ),
                     0.0,
                 ));
             }
@@ -486,7 +523,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                     &s.id,
                     &s.label,
                     true,
-                    &format!("{} — part of the exhausted-source finding (validated against SFC below)", s.detail),
+                    &format!(
+                        "{} — part of the exhausted-source finding (validated against SFC below)",
+                        s.detail
+                    ),
                     s.secs,
                 );
                 ui::cmd_done(&folded);
@@ -501,7 +541,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                 &format!("dism-restore-{}", i + 1),
                 "dism /Online /Cleanup-Image /RestoreHealth (ladder attempt)",
                 false,
-                &format!("failed - full raw output in the transcript (exit {})", a.code),
+                &format!(
+                    "failed - full raw output in the transcript (exit {})",
+                    a.code
+                ),
                 a.secs,
             );
             ui::cmd_done(&s);
@@ -516,7 +559,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     // The refused attempt is folded into the retry's step (single print).
     if !s5.ok && s5.detail.contains("refused to run") {
         ui::warn("SFC refused (WRP conflict) - settling 90 s and retrying once");
-        ui::wait_steps(90, "letting CBS finish its transaction before the SFC retry");
+        ui::wait_steps(
+            90,
+            "letting CBS finish its transaction before the SFC retry",
+        );
         let (s5r, repaired_r, cannot_r) = sfc_run("/scannow", 5400);
         if repaired_r {
             reboot = true;
@@ -526,7 +572,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             s5r.detail
         );
         if s5r.detail.contains("no integrity violations") {
-            detail = format!("{} — first attempt was a WRP refusal, not corruption", detail);
+            detail = format!(
+                "{} — first attempt was a WRP refusal, not corruption",
+                detail
+            );
         }
         s5 = Step::new(&s5.id, &s5.label, s5r.ok, &detail, s5.secs + s5r.secs);
         let _ = cannot_r;
@@ -539,7 +588,12 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     steps.push(s5);
     if cannot {
         ui::warn("SFC could not fix everything - one extra RestoreHealth + SFC pair");
-        steps.push(dism("dism-restore-extra", "/RestoreHealth", &[0, 3010, 1641], 5400));
+        steps.push(dism(
+            "dism-restore-extra",
+            "/RestoreHealth",
+            &[0, 3010, 1641],
+            5400,
+        ));
         let (s5b, repaired2, cannot2) = sfc_run("/scannow", 5400);
         if repaired2 {
             reboot = true;
@@ -600,10 +654,17 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     ui::step("R7: chkdsk /scan on every fixed drive (online - never dismounts)");
     let sysdrive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
     let drives = crate::winapi::fixed_drives();
-    ui::info(&format!("fixed drives: {}  (system drive: {})", drives.join(" "), sysdrive));
+    ui::info(&format!(
+        "fixed drives: {}  (system drive: {})",
+        drives.join(" "),
+        sysdrive
+    ));
     for d in &drives {
         let id = format!("chkdsk-{}-scan", d);
-        ui::info(&format!("chkdsk {}: scanning (up to 60 min, output captured to transcript)...", d));
+        ui::info(&format!(
+            "chkdsk {}: scanning (up to 60 min, output captured to transcript)...",
+            d
+        ));
         let r = runner::run_steady(true, &id, "chkdsk.exe", &[d, "/scan"], &[0, 1, 2, 3], 3600);
         match r.code {
             3 => {
@@ -664,19 +725,40 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     steps.extend(wu_reset::re_register_dlls());
 
     ui::step("R9: DISM StartComponentCleanup (post-repair)");
-    steps.push(dism("dism-componentcleanup", "/StartComponentCleanup", &[0, 3010], 3600));
+    steps.push(dism(
+        "dism-componentcleanup",
+        "/StartComponentCleanup",
+        &[0, 3010],
+        3600,
+    ));
 
     ui::step("R10: DISM SPSuperseded (no-op on modern images is classified OK)");
     {
         let args = ["/Online", "/Cleanup-Image", "/SPSuperseded"];
-        let r = runner::run_steady(true, "dism-spsuperseded", "dism.exe", &args, &[0, 3010], 3600);
+        let r = runner::run_steady(
+            true,
+            "dism-spsuperseded",
+            "dism.exe",
+            &args,
+            &[0, 3010],
+            3600,
+        );
         let ok = r.ok || r.code == 50 || r.output.contains("not supported");
         let detail = if r.ok {
             format!("exit {}", r.code)
         } else {
-            format!("exit {} - not applicable on this image (classified no-op)", r.code)
+            format!(
+                "exit {} - not applicable on this image (classified no-op)",
+                r.code
+            )
         };
-        let s = Step::new("dism-spsuperseded", "dism /SPSuperseded", ok, &detail, r.secs);
+        let s = Step::new(
+            "dism-spsuperseded",
+            "dism /SPSuperseded",
+            ok,
+            &detail,
+            r.secs,
+        );
         ui::cmd_done(&s);
         steps.push(s);
     }
@@ -684,7 +766,14 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     ui::step("R11: final verification (CheckHealth + verifyonly)");
     {
         let args = ["/Online", "/Cleanup-Image", "/CheckHealth"];
-        let r = runner::run_steady(false, "dism-checkhealth-final", "dism.exe", &args, &[0], 300);
+        let r = runner::run_steady(
+            false,
+            "dism-checkhealth-final",
+            "dism.exe",
+            &args,
+            &[0],
+            300,
+        );
         let corrupt = r.output.contains("repairable") || r.output.contains("corruption detected");
         let s = Step::new(
             "dism-checkhealth-final",
@@ -750,7 +839,12 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
         "commit-shield",
         "commit shield during repairs (30s cadence, on-demand pagefiles)",
         true,
-        &format!("{} supplementary pagefiles created on demand; commit free {:.1} GB of {:.1} GB at end", mfiles, mfree as f64 / 1073741824.0, mlimit as f64 / 1073741824.0),
+        &format!(
+            "{} supplementary pagefiles created on demand; commit free {:.1} GB of {:.1} GB at end",
+            mfiles,
+            mfree as f64 / 1073741824.0,
+            mlimit as f64 / 1073741824.0
+        ),
         0.0,
     ));
 

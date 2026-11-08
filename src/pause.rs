@@ -91,13 +91,25 @@ pub fn run() -> Vec<Step> {
     }
     let t = Instant::now();
     let ok = winapi::reg_set_dword(crate::resume::UX, "FlightSettingsMaxPauseDays", 3650);
-    steps.push(Step::new("pause-set-FlightSettingsMaxPauseDays", "set FlightSettingsMaxPauseDays=3650", ok, if ok { "written" } else { "WRITE FAILED" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "pause-set-FlightSettingsMaxPauseDays",
+        "set FlightSettingsMaxPauseDays=3650",
+        ok,
+        if ok { "written" } else { "WRITE FAILED" },
+        t.elapsed().as_secs_f64(),
+    ));
     ui::ok(&format!("all update types paused until {}", FAR));
 
     ui::step("NoAutoUpdate=1 policy (automatic updates off)");
     let t = Instant::now();
     let ok = winapi::reg_set_dword(crate::resume::AU_POL, "NoAutoUpdate", 1);
-    steps.push(Step::new("pause-set-NoAutoUpdate", "set AU\\NoAutoUpdate=1", ok, if ok { "written" } else { "WRITE FAILED" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "pause-set-NoAutoUpdate",
+        "set AU\\NoAutoUpdate=1",
+        ok,
+        if ok { "written" } else { "WRITE FAILED" },
+        t.elapsed().as_secs_f64(),
+    ));
 
     ui::step("Stopping update services and disabling wuauserv");
     for s in crate::resume::SERVICES {
@@ -107,19 +119,39 @@ pub fn run() -> Vec<Step> {
             &format!("pause-stop-{}", s),
             &format!("stop + verify {}", s),
             ok,
-            if ok { "STOPPED (verified)" } else { "still running" },
+            if ok {
+                "STOPPED (verified)"
+            } else {
+                "still running"
+            },
             t.elapsed().as_secs_f64(),
         ));
     }
     let t = Instant::now();
     let ok = winapi::sc_set_start_type("wuauserv", 4);
-    steps.push(Step::new("pause-disable-wuauserv", "sc config wuauserv start= disabled", ok, if ok { "disabled" } else { "FAILED" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "pause-disable-wuauserv",
+        "sc config wuauserv start= disabled",
+        ok,
+        if ok { "disabled" } else { "FAILED" },
+        t.elapsed().as_secs_f64(),
+    ));
     ui::ok("wuauserv: disabled");
 
     ui::step("Disabling WaaSMedicSvc (stops Windows from re-enabling updates)");
     let t = Instant::now();
     let ok = winapi::reg_set_dword(crate::resume::MEDIC, "Start", 4);
-    steps.push(Step::new("pause-disable-medic", "registry WaaSMedicSvc Start=4", ok, if ok { "disabled" } else { "FAILED (protected key)" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "pause-disable-medic",
+        "registry WaaSMedicSvc Start=4",
+        ok,
+        if ok {
+            "disabled"
+        } else {
+            "FAILED (protected key)"
+        },
+        t.elapsed().as_secs_f64(),
+    ));
     if ok {
         ui::ok("WaaSMedicSvc: disabled");
     } else {

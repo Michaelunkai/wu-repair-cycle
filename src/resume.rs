@@ -66,7 +66,11 @@ pub fn svc_state_ok(svc: &str) -> (bool, String) {
         Some(2) | Some(3) => (true, "demand/auto startable - idle (healthy)".to_string()),
         Some(4) => {
             if svc == "dosvc" {
-                (true, "disabled - NON-BLOCKING (Delivery Optimization bypassed: DODownloadMode=0)".to_string())
+                (
+                    true,
+                    "disabled - NON-BLOCKING (Delivery Optimization bypassed: DODownloadMode=0)"
+                        .to_string(),
+                )
             } else {
                 (false, "DISABLED".to_string())
             }
@@ -86,7 +90,11 @@ pub fn run() -> Vec<Step> {
             &format!("resume-del-{}", v),
             &format!("delete HKLM\\...\\UX\\Settings\\{}", v),
             ok,
-            if ok { "removed/absent" } else { "delete failed" },
+            if ok {
+                "removed/absent"
+            } else {
+                "delete failed"
+            },
             t.elapsed().as_secs_f64(),
         ));
         if ok {
@@ -96,7 +104,9 @@ pub fn run() -> Vec<Step> {
         }
     }
 
-    ui::step("Delivery Optimization bypass (DO range downloads fail 0x8024001E on proxied networks)");
+    ui::step(
+        "Delivery Optimization bypass (DO range downloads fail 0x8024001E on proxied networks)",
+    );
     {
         let t = Instant::now();
         let ok = winapi::reg_set_dword(
@@ -108,7 +118,11 @@ pub fn run() -> Vec<Step> {
             "resume-do-bypass",
             "set DODownloadMode=0 (bypass Delivery Optimization)",
             ok,
-            if ok { "updates download via plain HTTP from WU" } else { "set failed" },
+            if ok {
+                "updates download via plain HTTP from WU"
+            } else {
+                "set failed"
+            },
             t.elapsed().as_secs_f64(),
         ));
         if ok {
@@ -139,7 +153,10 @@ pub fn run() -> Vec<Step> {
                 t.elapsed().as_secs_f64(),
             ));
             if ok {
-                ui::ok(&format!("commit headroom raised: {:.1} GB free now", free2 as f64 / 1073741824.0));
+                ui::ok(&format!(
+                    "commit headroom raised: {:.1} GB free now",
+                    free2 as f64 / 1073741824.0
+                ));
             } else {
                 ui::warn("pagefile expansion failed - repairs may hit E_OUTOFMEMORY");
             }
@@ -148,7 +165,11 @@ pub fn run() -> Vec<Step> {
                 "commit-rescue-pagefile",
                 "commit headroom check",
                 true,
-                &format!("{:.1} GB free of {:.1} GB - no rescue needed", free as f64 / 1073741824.0, limit as f64 / 1073741824.0),
+                &format!(
+                    "{:.1} GB free of {:.1} GB - no rescue needed",
+                    free as f64 / 1073741824.0,
+                    limit as f64 / 1073741824.0
+                ),
                 0.0,
             ));
         }
@@ -162,7 +183,11 @@ pub fn run() -> Vec<Step> {
             &format!("resume-upd-{}", v),
             &format!("delete UpdatePolicy\\Settings\\{}", v),
             ok,
-            if ok { "removed/absent" } else { "delete failed" },
+            if ok {
+                "removed/absent"
+            } else {
+                "delete failed"
+            },
             t.elapsed().as_secs_f64(),
         ));
         if ok {
@@ -180,7 +205,11 @@ pub fn run() -> Vec<Step> {
             &format!("resume-pol-{}", v),
             &format!("delete policy AU\\{}", v),
             ok,
-            if ok { "removed/absent" } else { "delete failed" },
+            if ok {
+                "removed/absent"
+            } else {
+                "delete failed"
+            },
             t.elapsed().as_secs_f64(),
         ));
     }
@@ -191,7 +220,11 @@ pub fn run() -> Vec<Step> {
             &format!("resume-pol-{}", v),
             &format!("delete policy WU\\{}", v),
             ok,
-            if ok { "removed/absent" } else { "delete failed" },
+            if ok {
+                "removed/absent"
+            } else {
+                "delete failed"
+            },
             t.elapsed().as_secs_f64(),
         ));
     }
@@ -210,7 +243,11 @@ pub fn run() -> Vec<Step> {
                 &format!("resume-sdheal-{}", s),
                 &format!("take ownership + reset DACL on {}", s),
                 ok,
-                if ok { "ownership -> Administrators; DACL: BA+SYSTEM full" } else { "heal FAILED (still denied)" },
+                if ok {
+                    "ownership -> Administrators; DACL: BA+SYSTEM full"
+                } else {
+                    "heal FAILED (still denied)"
+                },
                 t.elapsed().as_secs_f64(),
             ));
             if ok {
@@ -232,20 +269,36 @@ pub fn run() -> Vec<Step> {
     ui::step("Restoring service start types (wuauserv/dosvc/UsoSvc manual, WaaSMedicSvc manual)");
     let t = Instant::now();
     let ok = winapi::sc_set_start_type("wuauserv", 3);
-    steps.push(Step::new("resume-svc-wuauserv-demand", "sc config wuauserv start= demand", ok, if ok { "set" } else { "failed" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "resume-svc-wuauserv-demand",
+        "sc config wuauserv start= demand",
+        ok,
+        if ok { "set" } else { "failed" },
+        t.elapsed().as_secs_f64(),
+    ));
     // The re-pause watchdog also disables dosvc + UsoSvc outright. Try to reset
     // both; dosvc staying disabled is classified non-blocking (DO bypassed).
     for s in ["UsoSvc", "dosvc"] {
         let t = Instant::now();
-        let cur = winapi::reg_get_dword(&format!("SYSTEM\\CurrentControlSet\\Services\\{}", s), "Start");
+        let cur = winapi::reg_get_dword(
+            &format!("SYSTEM\\CurrentControlSet\\Services\\{}", s),
+            "Start",
+        );
         if cur == Some(4) {
             let mut ok = false;
             for _try in 0..3 {
                 let _ = winapi::sc_heal_sd(s);
-                winapi::reg_set_dword(&format!("SYSTEM\\CurrentControlSet\\Services\\{}", s), "Start", 3);
+                winapi::reg_set_dword(
+                    &format!("SYSTEM\\CurrentControlSet\\Services\\{}", s),
+                    "Start",
+                    3,
+                );
                 if winapi::sc_set_start_type(s, 3) {
                     std::thread::sleep(std::time::Duration::from_secs(2));
-                    let now = winapi::reg_get_dword(&format!("SYSTEM\\CurrentControlSet\\Services\\{}", s), "Start");
+                    let now = winapi::reg_get_dword(
+                        &format!("SYSTEM\\CurrentControlSet\\Services\\{}", s),
+                        "Start",
+                    );
                     if now != Some(4) {
                         ok = true;
                         break;
@@ -271,7 +324,13 @@ pub fn run() -> Vec<Step> {
     }
     let t = Instant::now();
     let ok = winapi::reg_set_dword(MEDIC, "Start", 3);
-    steps.push(Step::new("resume-medic-manual", "registry WaaSMedicSvc Start=3", ok, if ok { "set" } else { "failed" }, t.elapsed().as_secs_f64()));
+    steps.push(Step::new(
+        "resume-medic-manual",
+        "registry WaaSMedicSvc Start=3",
+        ok,
+        if ok { "set" } else { "failed" },
+        t.elapsed().as_secs_f64(),
+    ));
 
     ui::step("Starting all update services (wuauserv verified; demand services startable)");
     for s in SERVICES {
@@ -301,17 +360,46 @@ pub fn run() -> Vec<Step> {
     // permanently anyway.
     ui::step("Suppressing auto-installs for the repair window (prevents servicing-stack crashes and forced restarts)");
     let sup: [(&str, &str, &str, u32, &str); 4] = [
-        (AU_POL, "NoAutoUpdate", "automatic detection/install off during repairs", 1, "resume-sup-NoAutoUpdate"),
-        (AU_POL, "AUOptions", "notify-only option during repairs", 2, "resume-sup-AUOptions"),
-        (AU_POL, "NoAutoRebootWithLoggedOnUsers", "never force-restart while a user is logged on", 1, "resume-sup-NoAutoReboot"),
-        ("SOFTWARE\\Policies\\Microsoft\\WindowsStore", "AutoDownload", "no auto-download/install of Store apps during repairs", 2, "resume-sup-StoreAutoDownload"),
+        (
+            AU_POL,
+            "NoAutoUpdate",
+            "automatic detection/install off during repairs",
+            1,
+            "resume-sup-NoAutoUpdate",
+        ),
+        (
+            AU_POL,
+            "AUOptions",
+            "notify-only option during repairs",
+            2,
+            "resume-sup-AUOptions",
+        ),
+        (
+            AU_POL,
+            "NoAutoRebootWithLoggedOnUsers",
+            "never force-restart while a user is logged on",
+            1,
+            "resume-sup-NoAutoReboot",
+        ),
+        (
+            "SOFTWARE\\Policies\\Microsoft\\WindowsStore",
+            "AutoDownload",
+            "no auto-download/install of Store apps during repairs",
+            2,
+            "resume-sup-StoreAutoDownload",
+        ),
     ];
     for (path, name, what, val, id) in sup {
         let t = Instant::now();
         let ok = winapi::reg_set_dword(path, name, val);
         steps.push(Step::new(
             id,
-            &format!("set {}\\{} = {}", path.rsplit('\\').next().unwrap_or(path), name, val),
+            &format!(
+                "set {}\\{} = {}",
+                path.rsplit('\\').next().unwrap_or(path),
+                name,
+                val
+            ),
             ok,
             &format!("{}{}", if ok { "suppressed: " } else { "FAILED: " }, what),
             t.elapsed().as_secs_f64(),
@@ -354,11 +442,16 @@ pub fn check_only_report() {
         svc_start("WaaSMedicSvc")
     );
     println!();
-    println!("Run without --check-only for the full cycle: RESUME -> REPAIR -> PERMANENT RE-PAUSE.");
+    println!(
+        "Run without --check-only for the full cycle: RESUME -> REPAIR -> PERMANENT RE-PAUSE."
+    );
 }
 
 fn svc_start(name: &str) -> String {
-    winapi::reg_get_dword(&format!("SYSTEM\\CurrentControlSet\\Services\\{}", name), "Start")
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "?".to_string())
+    winapi::reg_get_dword(
+        &format!("SYSTEM\\CurrentControlSet\\Services\\{}", name),
+        "Start",
+    )
+    .map(|v| v.to_string())
+    .unwrap_or_else(|| "?".to_string())
 }

@@ -19,7 +19,12 @@ fn index_list_parses_and_ignores_garbage() {
 
 #[test]
 fn index_detail_never_panics() {
-    for s in ["", "garbage", "Version : 10.0.\nEdition :", "Version : x.y.z\nServicePack Build : \u{0}"] {
+    for s in [
+        "",
+        "garbage",
+        "Version : 10.0.\nEdition :",
+        "Version : x.y.z\nServicePack Build : \u{0}",
+    ] {
         let _ = parse_index_detail(s);
     }
 }

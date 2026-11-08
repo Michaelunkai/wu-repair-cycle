@@ -1,9 +1,9 @@
-pub mod winapi;
+pub mod pause;
+pub mod repair;
+pub mod resume;
 pub mod runner;
+pub mod source;
 pub mod ui;
 pub mod verify;
-pub mod resume;
+pub mod winapi;
 pub mod wu_reset;
-pub mod repair;
-pub mod pause;
-pub mod source;

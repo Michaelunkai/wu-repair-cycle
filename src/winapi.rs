@@ -7,7 +7,10 @@ use std::os::windows::ffi::OsStrExt;
 use std::process::Command;
 
 fn wide(s: &str) -> Vec<u16> {
-    OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 // ---------- kernel32 ----------
@@ -317,7 +320,9 @@ pub fn wait_datastore(path: &std::path::Path, max_secs: u64) -> (bool, u64) {
     let mut waited = 0u64;
     while waited < max_secs {
         let ok = path.exists()
-            && std::fs::metadata(path).map(|m| m.len() > 100).unwrap_or(false);
+            && std::fs::metadata(path)
+                .map(|m| m.len() > 100)
+                .unwrap_or(false);
         if ok {
             return (true, waited);
         }
@@ -391,7 +396,14 @@ pub fn reg_set_sz(path: &str, name: &str, val: &str) -> bool {
         let mut v: Vec<u16> = OsStr::new(val).encode_wide().collect();
         v.push(0);
         let bytes = std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 2);
-        let rr = RegSetValueExW(hk, wn.as_ptr(), 0, REG_SZ, bytes.as_ptr(), (v.len() * 2) as u32);
+        let rr = RegSetValueExW(
+            hk,
+            wn.as_ptr(),
+            0,
+            REG_SZ,
+            bytes.as_ptr(),
+            (v.len() * 2) as u32,
+        );
         RegCloseKey(hk);
         rr == 0
     }
@@ -456,7 +468,14 @@ pub fn reg_get_sz(path: &str, name: &str) -> Option<String> {
         }
         let mut ty: u32 = 0;
         let mut cb: u32 = 0;
-        let q = RegQueryValueExW(hk, wn.as_ptr(), std::ptr::null_mut(), &mut ty, std::ptr::null_mut(), &mut cb);
+        let q = RegQueryValueExW(
+            hk,
+            wn.as_ptr(),
+            std::ptr::null_mut(),
+            &mut ty,
+            std::ptr::null_mut(),
+            &mut cb,
+        );
         if q != 0 || cb == 0 {
             RegCloseKey(hk);
             return None;
@@ -475,7 +494,9 @@ pub fn reg_get_sz(path: &str, name: &str) -> Option<String> {
             return None;
         }
         let units = cb as usize / 2;
-        let w: Vec<u16> = (0..units).map(|i| u16::from_le_bytes([buf[i * 2], buf[i * 2 + 1]])).collect();
+        let w: Vec<u16> = (0..units)
+            .map(|i| u16::from_le_bytes([buf[i * 2], buf[i * 2 + 1]]))
+            .collect();
         let trimmed: Vec<u16> = w.into_iter().take_while(|&x| x != 0).collect();
         Some(String::from_utf16_lossy(&trimmed))
     }
@@ -527,7 +548,7 @@ const SERVICE_ALL_ACCESS: u32 = 0xF01FF;
 
 #[repr(C)]
 #[allow(non_snake_case)]
-struct LUID {
+struct LuidValue {
     LowPart: u32,
     HighPart: i32,
 }
@@ -536,7 +557,7 @@ struct LUID {
 #[allow(non_snake_case)]
 struct TOKEN_PRIVILEGES1 {
     PrivilegeCount: u32,
-    Luid: LUID,
+    Luid: LuidValue,
     Attributes: u32,
 }
 
@@ -555,16 +576,8 @@ struct SD_ABS {
 #[allow(non_snake_case)]
 #[link(name = "advapi32")]
 extern "system" {
-    fn OpenProcessToken(
-        h: *mut c_void,
-        desired: u32,
-        tok: *mut *mut c_void,
-    ) -> i32;
-    fn LookupPrivilegeValueW(
-        sysname: *const u16,
-        name: *const u16,
-        luid: *mut LUID,
-    ) -> i32;
+    fn OpenProcessToken(h: *mut c_void, desired: u32, tok: *mut *mut c_void) -> i32;
+    fn LookupPrivilegeValueW(sysname: *const u16, name: *const u16, luid: *mut LuidValue) -> i32;
     fn AdjustTokenPrivileges(
         tok: *mut c_void,
         disableAll: i32,
@@ -573,11 +586,7 @@ extern "system" {
         prev: *mut u8,
         retlen: *mut u32,
     ) -> i32;
-    fn SetServiceObjectSecurity(
-        hService: *mut c_void,
-        info: u32,
-        sd: *const u8,
-    ) -> i32;
+    fn SetServiceObjectSecurity(hService: *mut c_void, info: u32, sd: *const u8) -> i32;
 }
 
 #[allow(non_snake_case)]
@@ -622,11 +631,19 @@ fn acl_with_aces(aces: &[(u32, &[u8])]) -> Vec<u8> {
 fn enable_take_ownership() -> bool {
     unsafe {
         let mut tok: *mut c_void = std::ptr::null_mut();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut tok) == 0 {
+        if OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &mut tok,
+        ) == 0
+        {
             return false;
         }
         let name = wide("SeTakeOwnershipPrivilege");
-        let mut luid = LUID { LowPart: 0, HighPart: 0 };
+        let mut luid = LuidValue {
+            LowPart: 0,
+            HighPart: 0,
+        };
         if LookupPrivilegeValueW(std::ptr::null(), name.as_ptr(), &mut luid) == 0 {
             CloseHandle(tok);
             return false;
@@ -636,7 +653,14 @@ fn enable_take_ownership() -> bool {
             Luid: luid,
             Attributes: SE_PRIVILEGE_ENABLED,
         };
-        let ok = AdjustTokenPrivileges(tok, 0, &mut tp, 0, std::ptr::null_mut(), std::ptr::null_mut()) != 0;
+        let ok = AdjustTokenPrivileges(
+            tok,
+            0,
+            &mut tp,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        ) != 0;
         CloseHandle(tok);
         ok
     }
@@ -675,7 +699,11 @@ pub fn sc_heal_sd(name: &str) -> bool {
         };
         let h1 = OpenServiceW(scm, wname.as_ptr(), WRITE_OWNER);
         if !h1.is_null() {
-            let _ = SetServiceObjectSecurity(h1, OWNER_SECURITY_INFORMATION, &sd_owner as *const SD_ABS as *const u8);
+            let _ = SetServiceObjectSecurity(
+                h1,
+                OWNER_SECURITY_INFORMATION,
+                &sd_owner as *const SD_ABS as *const u8,
+            );
             CloseServiceHandle(h1);
         }
 
@@ -695,7 +723,11 @@ pub fn sc_heal_sd(name: &str) -> bool {
             CloseServiceHandle(scm);
             return false;
         }
-        let ok = SetServiceObjectSecurity(h2, DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION, &sd_dacl as *const SD_ABS as *const u8) != 0;
+        let ok = SetServiceObjectSecurity(
+            h2,
+            DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION,
+            &sd_dacl as *const SD_ABS as *const u8,
+        ) != 0;
         CloseServiceHandle(h2);
         CloseServiceHandle(scm);
         ok
@@ -718,7 +750,7 @@ struct UNICODE_STRING {
 
 #[repr(C)]
 #[allow(non_snake_case)]
-struct MEMORYSTATUSEX {
+struct MemoryStatusEx {
     dwLength: u32,
     dwMemoryLoad: u32,
     ullTotalPhys: u64,
@@ -733,7 +765,7 @@ struct MEMORYSTATUSEX {
 #[allow(non_snake_case)]
 #[link(name = "kernel32")]
 extern "system" {
-    fn GlobalMemoryStatusEx(buf: *mut MEMORYSTATUSEX) -> i32;
+    fn GlobalMemoryStatusEx(buf: *mut MemoryStatusEx) -> i32;
 }
 
 #[allow(non_snake_case)]
@@ -750,8 +782,8 @@ extern "system" {
 /// (commit_free_bytes, commit_limit_bytes)
 pub fn commit_status() -> (u64, u64) {
     unsafe {
-        let mut m = MEMORYSTATUSEX {
-            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        let mut m = MemoryStatusEx {
+            dwLength: std::mem::size_of::<MemoryStatusEx>() as u32,
             dwMemoryLoad: 0,
             ullTotalPhys: 0,
             ullAvailPhys: 0,
@@ -771,11 +803,19 @@ pub fn commit_status() -> (u64, u64) {
 fn enable_privilege(name: &str) -> bool {
     unsafe {
         let mut tok: *mut c_void = std::ptr::null_mut();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut tok) == 0 {
+        if OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &mut tok,
+        ) == 0
+        {
             return false;
         }
         let wname = wide(name);
-        let mut luid = LUID { LowPart: 0, HighPart: 0 };
+        let mut luid = LuidValue {
+            LowPart: 0,
+            HighPart: 0,
+        };
         if LookupPrivilegeValueW(std::ptr::null(), wname.as_ptr(), &mut luid) == 0 {
             CloseHandle(tok);
             return false;
@@ -785,7 +825,14 @@ fn enable_privilege(name: &str) -> bool {
             Luid: luid,
             Attributes: SE_PRIVILEGE_ENABLED,
         };
-        let ok = AdjustTokenPrivileges(tok, 0, &mut tp, 0, std::ptr::null_mut(), std::ptr::null_mut()) != 0;
+        let ok = AdjustTokenPrivileges(
+            tok,
+            0,
+            &mut tp,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        ) != 0;
         CloseHandle(tok);
         ok
     }

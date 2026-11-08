@@ -113,30 +113,88 @@ fn dry_run() {
 
     ui::step("PHASE 1 — RESUME (registry + services)");
     for v in resume::PAUSE_VALUES {
-        add(&format!("resume-del-{}", v), &format!("delete HKLM pause value {}", v), &mut steps);
+        add(
+            &format!("resume-del-{}", v),
+            &format!("delete HKLM pause value {}", v),
+            &mut steps,
+        );
     }
-    for p in ["policy AU\\NoAutoUpdate", "policy AU\\UseWUServer", "policy WU\\WUServer",
-              "policy WU\\WUStatusServer", "policy WU\\DoNotConnectToWindowsUpdateInternetLocations",
-              "policy WU\\DisableWindowsUpdateAccess", "policy WU\\SetPolicyDrivenUpdateSource x4"] {
-        add(&format!("resume-pol-{}", p.replace('\\', "-")), p, &mut steps);
+    for p in [
+        "policy AU\\NoAutoUpdate",
+        "policy AU\\UseWUServer",
+        "policy WU\\WUServer",
+        "policy WU\\WUStatusServer",
+        "policy WU\\DoNotConnectToWindowsUpdateInternetLocations",
+        "policy WU\\DisableWindowsUpdateAccess",
+        "policy WU\\SetPolicyDrivenUpdateSource x4",
+    ] {
+        add(
+            &format!("resume-pol-{}", p.replace('\\', "-")),
+            p,
+            &mut steps,
+        );
     }
-    add("resume-svc-wuauserv-demand", "sc config wuauserv start= demand", &mut steps);
-    add("resume-medic-manual", "registry WaaSMedicSvc Start=3", &mut steps);
+    add(
+        "resume-svc-wuauserv-demand",
+        "sc config wuauserv start= demand",
+        &mut steps,
+    );
+    add(
+        "resume-medic-manual",
+        "registry WaaSMedicSvc Start=3",
+        &mut steps,
+    );
     for s in resume::SERVICES {
-        add(&format!("resume-svc-{}", s), &format!("start + verify {}", s), &mut steps);
+        add(
+            &format!("resume-svc-{}", s),
+            &format!("start + verify {}", s),
+            &mut steps,
+        );
     }
 
     ui::step("PHASE 2 — REPAIR MATRIX (R-pre, R0-R11)");
-    add("net-connectivity", "curl msftconnecttest + windowsupdate.com (repair-payload download path)", &mut steps);
-    add("reset-components", "stop svcs, rename SoftwareDistribution + catroot2, restart svcs", &mut steps);
-    add("dism-analyze", "dism /Online /Cleanup-Image /AnalyzeComponentStore", &mut steps);
-    add("dism-checkhealth", "dism /Online /Cleanup-Image /CheckHealth", &mut steps);
-    add("dism-scanhealth", "dism /Online /Cleanup-Image /ScanHealth", &mut steps);
+    add(
+        "net-connectivity",
+        "curl msftconnecttest + windowsupdate.com (repair-payload download path)",
+        &mut steps,
+    );
+    add(
+        "reset-components",
+        "stop svcs, rename SoftwareDistribution + catroot2, restart svcs",
+        &mut steps,
+    );
+    add(
+        "dism-analyze",
+        "dism /Online /Cleanup-Image /AnalyzeComponentStore",
+        &mut steps,
+    );
+    add(
+        "dism-checkhealth",
+        "dism /Online /Cleanup-Image /CheckHealth",
+        &mut steps,
+    );
+    add(
+        "dism-scanhealth",
+        "dism /Online /Cleanup-Image /ScanHealth",
+        &mut steps,
+    );
     add("dism-restore", "dism /Online /Cleanup-Image /RestoreHealth (3-attempt ladder, fresh store between attempts)", &mut steps);
-    add("dism-log-forensics", "parse CBS + DISM logs for the exact missing-payload identities", &mut steps);
+    add(
+        "dism-log-forensics",
+        "parse CBS + DISM logs for the exact missing-payload identities",
+        &mut steps,
+    );
     add("dism-restore-src", "dism /RestoreHealth /Source (local image ladder: mounted media, auto-mounted ISOs, --source path)", &mut steps);
-    add("sfc-scannow", "sfc /scannow (+ extra restore+sfc pair if it cannot fix)", &mut steps);
-    add("sfc-verifyonly", "sfc /verifyonly (falls back to /scannow only when CBS is pending)", &mut steps);
+    add(
+        "sfc-scannow",
+        "sfc /scannow (+ extra restore+sfc pair if it cannot fix)",
+        &mut steps,
+    );
+    add(
+        "sfc-verifyonly",
+        "sfc /verifyonly (falls back to /scannow only when CBS is pending)",
+        &mut steps,
+    );
     let sysdrive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
     for d in winapi::fixed_drives() {
         let is_sys = d == sysdrive;
@@ -145,23 +203,67 @@ fn dry_run() {
             &format!(
                 "chkdsk {} /scan{}",
                 d,
-                if is_sys { " (+ boot spotfix scheduling if errors found - never live dismount)" } else { "" }
+                if is_sys {
+                    " (+ boot spotfix scheduling if errors found - never live dismount)"
+                } else {
+                    ""
+                }
             ),
             &mut steps,
         );
     }
-    add("dll-reg", "regsvr32 /s x 32 Windows Update DLLs", &mut steps);
-    add("dism-componentcleanup", "dism /Online /Cleanup-Image /StartComponentCleanup", &mut steps);
-    add("dism-spsuperseded", "dism /Online /Cleanup-Image /SPSuperseded (no-op classified OK)", &mut steps);
-    add("dism-checkhealth-final", "dism /Online /Cleanup-Image /CheckHealth (final health gate)", &mut steps);
-    add("sfc-verifyonly-final", "sfc /verifyonly (final)", &mut steps);
+    add(
+        "dll-reg",
+        "regsvr32 /s x 32 Windows Update DLLs",
+        &mut steps,
+    );
+    add(
+        "dism-componentcleanup",
+        "dism /Online /Cleanup-Image /StartComponentCleanup",
+        &mut steps,
+    );
+    add(
+        "dism-spsuperseded",
+        "dism /Online /Cleanup-Image /SPSuperseded (no-op classified OK)",
+        &mut steps,
+    );
+    add(
+        "dism-checkhealth-final",
+        "dism /Online /Cleanup-Image /CheckHealth (final health gate)",
+        &mut steps,
+    );
+    add(
+        "sfc-verifyonly-final",
+        "sfc /verifyonly (final)",
+        &mut steps,
+    );
 
     ui::step("PHASE 3 — PAUSE PERMANENTLY (until 2099)");
-    add("pause-keys", "9 pause values (incl PauseUpdatesExpiryDate) + FlightSettingsMaxPauseDays=3650", &mut steps);
-    add("pause-NoAutoUpdate", "HKLM policy AU\\NoAutoUpdate=1", &mut steps);
-    add("pause-stop-services", "stop wuauserv, bits, cryptsvc, dosvc, UsoSvc (verified)", &mut steps);
-    add("pause-disable-wuauserv", "sc config wuauserv start= disabled", &mut steps);
-    add("pause-disable-medic", "registry WaaSMedicSvc Start=4", &mut steps);
+    add(
+        "pause-keys",
+        "9 pause values (incl PauseUpdatesExpiryDate) + FlightSettingsMaxPauseDays=3650",
+        &mut steps,
+    );
+    add(
+        "pause-NoAutoUpdate",
+        "HKLM policy AU\\NoAutoUpdate=1",
+        &mut steps,
+    );
+    add(
+        "pause-stop-services",
+        "stop wuauserv, bits, cryptsvc, dosvc, UsoSvc (verified)",
+        &mut steps,
+    );
+    add(
+        "pause-disable-wuauserv",
+        "sc config wuauserv start= disabled",
+        &mut steps,
+    );
+    add(
+        "pause-disable-medic",
+        "registry WaaSMedicSvc Start=4",
+        &mut steps,
+    );
 
     ui::summary(&steps, 0, false);
     ui::info("Run without flags (elevates via UAC) for the real zero-error repair cycle.");

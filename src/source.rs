@@ -10,6 +10,7 @@
 //!   3. probes WIM/ESD indexes, ranks them against the running OS build
 //!      (same build, same edition, closest revision <= UBR first), and
 //!   4. hands DISM /RestoreHealth the exact /Source:wim|esd:path:index arg.
+//!
 //! CBS pins exact file revisions - a same-build-line but older-revision ISO
 //! is attempted anyway (it repairs everything whose payloads did not change)
 //! and its outcome is reported honestly.
@@ -163,10 +164,7 @@ pub fn rank_indexes(ix: &[WimIndex], os_build: u32, os_ubr: u32, os_edition: &st
             let same_build = w.build == os_build && os_build > 0;
             let newer = w.build > os_build && os_build > 0;
             let ed = edition_matches(&w.edition, &w.name, os_edition);
-            let rev_pen: i64 = if same_build
-                && w.revision > 0
-                && w.revision <= os_ubr
-            {
+            let rev_pen: i64 = if same_build && w.revision > 0 && w.revision <= os_ubr {
                 (os_ubr - w.revision) as i64
             } else {
                 1_000_000
@@ -263,7 +261,7 @@ pub fn discover(explicit: Option<&str>) -> Vec<ImageSource> {
     for (letter, _t) in crate::winapi::drive_types() {
         for name in ["install.wim", "install.esd", "install.swm"] {
             let p = format!("{}\\sources\\{}", letter, name);
-            if let Some(k) = kind_for(&name) {
+            if let Some(k) = kind_for(name) {
                 push(p, k, false);
             }
         }
@@ -306,7 +304,13 @@ pub fn mount_iso(iso: &str) -> Option<String> {
     let r = runner::run_quiet(
         "src-mount-iso",
         "powershell.exe",
-        &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script],
+        &[
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ],
         &[0],
         240,
     );
@@ -328,7 +332,13 @@ pub fn dismount_iso(iso: &str) -> bool {
     runner::run_quiet(
         "src-dismount-iso",
         "powershell.exe",
-        &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script],
+        &[
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ],
         &[0],
         180,
     )

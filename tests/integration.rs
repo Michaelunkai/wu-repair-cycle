@@ -33,15 +33,34 @@ fn dry_run_zero_exit_all_pass() {
     let exe = env!("CARGO_BIN_EXE_wu-repair-cycle");
     let out = Command::new(exe).arg("--dry-run").output().unwrap();
     let s = String::from_utf8_lossy(&out.stdout);
-    assert!(out.status.success(), "dry-run must exit 0, got {:?}", out.status.code());
+    assert!(
+        out.status.success(),
+        "dry-run must exit 0, got {:?}",
+        out.status.code()
+    );
     assert!(s.contains("dism-restore"), "matrix must list RestoreHealth");
     assert!(s.contains("sfc-scannow"), "matrix must list SFC");
-    assert!(s.contains("verifyonly"), "matrix must use the valid /verifyonly switch");
-    assert!(!s.contains("verifynow"), "the invalid /verifynow switch must be gone");
-    assert!(s.contains("net-connectivity"), "matrix must list the connectivity probe");
-    assert!(s.contains("dism-restore-src"), "matrix must list the local-source ladder");
+    assert!(
+        s.contains("verifyonly"),
+        "matrix must use the valid /verifyonly switch"
+    );
+    assert!(
+        !s.contains("verifynow"),
+        "the invalid /verifynow switch must be gone"
+    );
+    assert!(
+        s.contains("net-connectivity"),
+        "matrix must list the connectivity probe"
+    );
+    assert!(
+        s.contains("dism-restore-src"),
+        "matrix must list the local-source ladder"
+    );
     assert!(s.contains("chkdsk"), "matrix must list chkdsk");
-    assert!(s.contains("ZERO ERRORS"), "dry-run summary must show zero errors");
+    assert!(
+        s.contains("ZERO ERRORS"),
+        "dry-run summary must show zero errors"
+    );
 }
 
 #[test]
@@ -50,7 +69,10 @@ fn check_only_zero_exit_and_readonly_hint() {
     let out = Command::new(exe).arg("--check-only").output().unwrap();
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success());
-    assert!(s.contains("Pause keys"), "check-only must report pause keys");
+    assert!(
+        s.contains("Pause keys"),
+        "check-only must report pause keys"
+    );
 }
 
 // ---------- source ladder (v2.1.0) ----------
@@ -117,8 +139,21 @@ fn rank_prefers_same_build_closest_revision_same_edition() {
     // revisions of the same build+edition, then same-build-newer-rev, then other
     // editions of the same build; the older build line is dead last.
     let ranked = rank_indexes(&ix, 26200, 9457, "Professional");
-    assert_eq!(ranked[0], 3, "index 3 (rev 9400, closest <= 9457) must rank first");
-    assert_eq!(ranked[1], 2, "index 2 (older rev 8037, same build+edition) must rank second");
-    assert_eq!(ranked[2], 5, "index 5 (same build, newer rev) must rank third");
-    assert_eq!(*ranked.last().unwrap(), 4, "the older build line must rank last");
+    assert_eq!(
+        ranked[0], 3,
+        "index 3 (rev 9400, closest <= 9457) must rank first"
+    );
+    assert_eq!(
+        ranked[1], 2,
+        "index 2 (older rev 8037, same build+edition) must rank second"
+    );
+    assert_eq!(
+        ranked[2], 5,
+        "index 5 (same build, newer rev) must rank third"
+    );
+    assert_eq!(
+        *ranked.last().unwrap(),
+        4,
+        "the older build line must rank last"
+    );
 }
