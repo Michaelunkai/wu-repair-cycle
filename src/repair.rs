@@ -612,7 +612,7 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     {
         let (sv, _, _) = sfc_run("/verifyonly", 3600);
         if sv.ok {
-            verify_clean = sv.detail.contains("no integrity violations");
+            verify_clean = sv.detail.contains("no integrity violations") || sv.detail == "exit 0";
             ui::cmd_done(&sv);
             steps.push(sv);
         } else if sv.detail.contains("pending") || sv.detail.contains("reboot needed") {
@@ -621,7 +621,8 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             if repaired_b {
                 reboot = true;
             }
-            verify_clean = sb.ok && sb.detail.contains("no integrity violations");
+            verify_clean =
+                sb.ok && (sb.detail.contains("no integrity violations") || sb.detail == "exit 0");
             let sub = Step::new(
                 "sfc-verifyonly",
                 "sfc /verifyonly (blocked by pending CBS) -> verified via /scannow",
