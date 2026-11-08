@@ -179,8 +179,6 @@ pub fn rank_indexes(ix: &[WimIndex], os_build: u32, os_ubr: u32, os_edition: &st
                 2
             } else if newer {
                 3
-            } else if same_build {
-                1 // unknown build (ESD detail parse failed) -> same tier as same-build
             } else {
                 9
             };
