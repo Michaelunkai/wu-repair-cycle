@@ -10,5 +10,7 @@
 | `tests/ten_second_law.rs` | Console heartbeat cadence stays at 10 s or less |
 | `tests/zero_deps.rs` | Cargo manifest stays dependency-free (single static exe) |
 | `tests/single_dism.rs` | Runner waits for any foreign DISM before starting its own (never two at once) |
+| `tests/sfc_retry.rs` | SFC WRP-refusal ("could not perform the requested operation") is retried up to 3 times after a 90 s settle |
 
 Safe flags for manual checks: `--check-only` (read-only status) and `--dry-run` (full plan, nothing executed).
+Unknown flags (and a bare `--source`) are rejected with exit code 2 and never start a full elevated run; `--help` prints usage.
