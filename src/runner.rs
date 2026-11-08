@@ -88,17 +88,19 @@ pub fn run_quiet(
     run_inner(id, program, args, ok_codes, timeout_secs, true)
 }
 
+/// Count tasklist CSV rows whose image is dism.exe (DismHost.exe is excluded).
+fn count_dism_lines(csv: &str) -> usize {
+    csv.lines()
+        .filter(|l| l.to_ascii_lowercase().starts_with("\"dism.exe\""))
+        .count()
+}
+
 /// Number of dism.exe processes currently running (any owner).
 fn dism_count() -> usize {
     Command::new("tasklist")
         .args(["/FI", "IMAGENAME eq dism.exe", "/FO", "CSV", "/NH"])
         .output()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter(|l| l.to_ascii_lowercase().starts_with("\"dism.exe\""))
-                .count()
-        })
+        .map(|o| count_dism_lines(&String::from_utf8_lossy(&o.stdout)))
         .unwrap_or(0)
 }
 
@@ -399,5 +401,25 @@ impl From<CmdResult> for Step {
             }
         };
         Step::new(&c.id, &label, c.ok, &detail, c.secs)
+    }
+}
+
+#[cfg(test)]
+mod dism_tests {
+    use super::count_dism_lines;
+    #[test]
+    fn counts_only_dism_rows() {
+        let csv = "\"Dism.exe\",\"37752\",\"Console\",\"1\",\"13,492 K\"
+\"dism.exe\",\"53704\",\"Console\",\"1\",\"13,072 K\"
+\"DismHost.exe\",\"1\",\"Console\",\"1\",\"1 K\"
+";
+        assert_eq!(count_dism_lines(csv), 2);
+        assert_eq!(
+            count_dism_lines(
+                "INFO: No tasks are running which match the specified criteria.
+"
+            ),
+            0
+        );
     }
 }
