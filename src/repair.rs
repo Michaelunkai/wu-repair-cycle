@@ -557,8 +557,11 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     // SFC sometimes refuses outright ("could not perform the requested
     // operation") while CBS is mid-transaction: settle, then retry once.
     // The refused attempt is folded into the retry's step (single print).
-    if !s5.ok && s5.detail.contains("refused to run") {
-        ui::warn("SFC refused (WRP conflict) - settling 90 s and retrying once");
+    let mut cannot = cannot;
+    let mut retries = 0u32;
+    while !s5.ok && s5.detail.contains("refused to run") && retries < 3 {
+        retries += 1;
+        ui::warn("SFC refused (WRP conflict) - settling 90 s and retrying");
         ui::wait_steps(
             90,
             "letting CBS finish its transaction before the SFC retry",
@@ -567,9 +570,10 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
         if repaired_r {
             reboot = true;
         }
+        cannot = cannot_r;
         let mut detail = format!(
-            "first attempt refused (WRP conflict) - retried after settle: {}",
-            s5r.detail
+            "first attempt refused (WRP conflict) - retry {} after settle: {}",
+            retries, s5r.detail
         );
         if s5r.detail.contains("no integrity violations") {
             detail = format!(
@@ -578,7 +582,6 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             );
         }
         s5 = Step::new(&s5.id, &s5.label, s5r.ok, &detail, s5.secs + s5r.secs);
-        let _ = cannot_r;
     }
     if repaired {
         reboot = true;
