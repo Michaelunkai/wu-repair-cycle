@@ -353,7 +353,6 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             ui::cmd_done(&s);
             steps.push(s);
         }
-    } else if restore_exhausted_0915 {
         // ---- R4b: forensics + LOCAL SOURCE ladder (DISM's own advice:
         // "use the Source option to specify the location of the files") ----
         let mut src_steps: Vec<Step> = Vec::new();
