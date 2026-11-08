@@ -9,5 +9,6 @@
 | `tests/command_coverage.rs` | DISM (check/scan/restore/cleanup), SFC and chkdsk stay in the repair set; no volume dismount |
 | `tests/ten_second_law.rs` | Console heartbeat cadence stays at 10 s or less |
 | `tests/zero_deps.rs` | Cargo manifest stays dependency-free (single static exe) |
+| `tests/single_dism.rs` | Runner waits for any foreign DISM before starting its own (never two at once) |
 
 Safe flags for manual checks: `--check-only` (read-only status) and `--dry-run` (full plan, nothing executed).
