@@ -804,3 +804,41 @@ PHASE 3 — PAUSE
   Microsoft Store auto-install can resume after an update resume (suppressed).
 - Everything in this plan is committed to the repository so the plan itself
   ships with the product.
+
+---
+
+## Part 17 — Execution Protocol (binds the next session, word for word)
+
+This protocol is what the next session runs, in order, without skipping. Each
+numbered step names its verification. The protocol exists so that the plan is
+self-executing: any session that picks up this repository follows these lines
+and arrives at the same perfection.
+
+1. Orient: read this PLAN.md end to end; read docs/COMMANDS.md; read
+   RELEASE_NOTES.md. Confirm the working tree is clean and main == origin.
+2. Environment check: verify cargo at C:\Users\Admin\.cargo\bin\cargo.exe;
+   ALWAYS pass --target x86_64-pc-windows-msvc; confirm the release exe exists
+   in F:\backup\rust\target\x86_64-pc-windows-msvc\release\ and copy it to
+   wufixr.exe in the same directory (neutral-name launch, Part 4.5).
+3. Machine check: commit free (wait for a dip >= 15 GB if below); no stale
+   wufixr/wu-repair-cycle/dism processes; the guard task list unchanged.
+4. Build gate: cargo build zero warnings; cargo test 7/7 green. Any failure:
+   fix in this session, never defer.
+5. Attempt: launch wufixr.exe elevated hidden with -Wait and capture EXITCODE.
+   Poll the newest wufix-*.log every 60 s. Completion = a FINAL line.
+6. On FINAL gate=0: capture EXITCODE (must be 0); verify the registry end
+   state live (the pause keys to 2099, NoAutoUpdate=1, wuauserv Start=4,
+   WaaSMedicSvc Start=4); run --pause-only via elevation as belt-and-braces;
+   verify the registry again.
+7. Freeze: copy the binary to the repo root; record its sha256 in
+   RELEASE_NOTES.md; update README/docs if any behavior changed; commit; push;
+   verify local == origin; create or refresh the GitHub release with the exe
+   and a zip; verify both asset URLs return HTTP 302.
+8. Report: state every demand from Part 1 with its fresh evidence, then print
+   the full absolute path to wu-repair-cycle.exe as the very last line. This
+   closing line is mandatory and closes the engagement.
+9. If any step fails: do not stop. Diagnose (transcripts are complete), fix in
+   this session, rebuild, and return to step 5. The only permitted final state
+   is the one in Part 13, achieved to the literal letter.
+
+The plan is complete. Execute it.
