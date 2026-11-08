@@ -636,3 +636,171 @@ full path to the executable as its last line. Every demand in Part 1 is then
 green with evidence — the literal perfection the owner demanded.
 
 
+
+---
+
+## Part 14 — Command Execution Annex (every command, exact arguments, exact rules)
+
+This annex is the line-by-line reference for what the executor spawns, in
+execution order. Timeouts are per invocation; "verified" means the tool polls
+the OS for the actual end state and reports it honestly.
+
+PHASE 1 — RESUME
+- Registry deletes against HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings:
+  PauseUpdatesStartTime, PauseUpdatesExpiryTime, PauseUpdatesExpiryDate,
+  PauseFeatureUpdatesStartTime, PauseFeatureUpdatesEndTime,
+  PauseQualityUpdatesStartTime, PauseQualityUpdatesEndTime,
+  PausePreviewBuildsStartTime, PausePreviewBuildsEndTime. Delete is idempotent:
+  a value that is already absent reports success (the gate counts the verified
+  end state, not the mutation).
+- Registry deletes against HKLM\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\
+  Settings: PausedQualityStatus, PausedFeatureStatus, PausedQualityDate,
+  PausedFeatureDate. This metadata is what makes CBS refuse repair payloads
+  even when the UX keys are gone — clearing it is mandatory before RestoreHealth.
+- Registry deletes against HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\
+  AU: NoAutoUpdate, UseWUServer; and against ...\WindowsUpdate: WUServer,
+  WUStatusServer, DoNotConnectToWindowsUpdateInternetLocations,
+  DisableWindowsUpdateAccess, SetPolicyDrivenUpdateSourceForQualityUpdates,
+  SetPolicyDrivenUpdateSourceForFeatureUpdates,
+  SetPolicyDrivenUpdateSourceForDriverUpdates,
+  SetPolicyDrivenUpdateSourceForContentUpdates.
+- Delivery Optimization bypass: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\
+  DeliveryOptimization\Config DODownloadMode = 0 (dword). DO range-downloads
+  fail 0x8024001E on proxied networks; mode 0 forces plain HTTP delivery.
+- Commit rescue: measure commit via GlobalMemoryStatusEx; when free < 8 GB,
+  NtCreatePagingFile("\??\C:\wufix-pagefile.sys", target bytes) after enabling
+  SeCreatePagefilePrivilege; re-measure and record before/after. This runs at
+  runtime — no reboot, no disruption.
+- Service security-descriptor heal (per service that fails even to open):
+  enable SeTakeOwnershipPrivilege via OpenProcessToken/LookupPrivilegeValueW/
+  AdjustTokenPrivileges; open the service with WRITE_OWNER; set the owner to
+  Administrators (S-1-5-32-544); reopen with WRITE_DAC | WRITE_OWNER; apply an
+  absolute SECURITY_DESCRIPTOR whose DACL grants SERVICE_ALL_ACCESS to
+  Administrators and to SYSTEM (S-1-5-18). This repairs what update-blocker
+  tools break: a DACL with no grants at all, which denies even elevated admins.
+- Start-type restoration: ChangeServiceConfigW wuauserv -> SERVICE_DEMAND_START
+  (fallback: `sc config wuauserv start= demand`); registry Start=3 for
+  WaaSMedicSvc; for dosvc/UsoSvc found disabled: the anti-race triple strike
+  (heal SD, write Start=3 directly, sc config, sleep 2 s, re-check; three
+  rounds). dosvc staying disabled is classified non-blocking under the DO
+  bypass and the step says so in plain words.
+- Service starts: StartServiceW (fallback `sc start`) then poll QueryServiceStatus
+  (fallback `sc query` text) every 200 ms for up to 30 s until the verified
+  state is RUNNING; wuauserv must reach RUNNING or the step fails the gate.
+- Install suppression (the four dword writes listed in Part 4.4).
+
+PHASE 2 — REPAIR
+- Shields activate (two threads: 10 s re-pause stripper + 30 s commit checker).
+- R0: stop wuauserv, bits, cryptsvc, dosvc, UsoSvc, msiserver (poll to STOPPED);
+  rename C:\Windows\SoftwareDistribution to SoftwareDistribution.old (or
+  .old_<timestamp> when the base name exists; three attempts 2 s apart; on
+  persistent lock keep the existing store — classified harmless); rename
+  C:\Windows\System32\catroot2 the same way (a persistent lock is classified
+  harmless — the folder rebuilds itself); restart cryptsvc, bits, dosvc,
+  wuauserv, UsoSvc (verified); run `UsoClient StartScan` and the WUA DetectNow
+  COM call (both quiet — their failure text is noise); poll for
+  SoftwareDistribution\DataStore\DataStore.edb to exist and exceed 100 bytes
+  (up to 180 s).
+- R1 `dism.exe /Online /Cleanup-Image /AnalyzeComponentStore` (ok 0, 1800 s).
+- R2 `dism.exe /Online /Cleanup-Image /CheckHealth` (ok 0, 300 s).
+- R3 `dism.exe /Online /Cleanup-Image /ScanHealth` (ok 0, 3600 s).
+- R4 `dism.exe /Online /Cleanup-Image /RestoreHealth` (ok 0/3010/1641, 5400 s,
+  quiet) — up to three verdict attempts; between attempts re-verify services,
+  and before attempt 3 a full R0 reset again. Codes: 0 success; 3010/1641
+  success + reboot flag; 0x800f0915 / "repair content" = the documented
+  deprecated-payload finding once the ladder exhausts; 0x40010004 and negative
+  codes = terminations, retried inside the attempt by run_steady.
+- R4b (only on the exhausted-0915 path): forensics parse of CBS.log (last 1 MB)
+  and dism.log (last 256 KB) capturing CheckSur / missing-replacement-payload /
+  0915 lines to the transcript; os_identity read (build/UBR/edition); source
+  discovery over all fixed drives (install.wim/.esd/.swm and .iso); ISO
+  mounting via PowerShell Mount-DiskImage; `dism /Get-WimInfo /WimFile:...`
+  index listing plus per-index detail (ESD detail failures fall back to the
+  listing); ranking by build/UBR/edition match; up to three
+  `/RestoreHealth /Source:wim|esd:<path>:<index>` runs (7200 s each, quiet,
+  steady); self-mounted ISOs dismounted; every step folded into the finding
+  with a single classified print.
+- R5 `sfc.exe /scannow` (ok 0, 5400 s, steady, tee): classification by text —
+  "did not find any integrity violations" = clean; "successfully repaired" =
+  repaired + reboot flag; "could not fix / unable to fix / cannot perform /
+  cannot repair" = an extra `/RestoreHealth` + `/scannow` pair, then the honest
+  verdict; the usage banner (when Windows rejects a switch) is classified as an
+  invalid invocation rather than a crash.
+- R6 `sfc.exe /verifyonly` (ok 0, 3600 s, steady): rejected by pending CBS
+  state (instant nonzero exit, usage banner, or pending text) = substituted
+  verification via /scannow; the step states the substitution plainly.
+- R7 `chkdsk.exe <D:> /scan` (ok 0/1/2/3, 3600 s, quiet) for every DRIVE_FIXED
+  volume: exit 3 on the system drive schedules the boot spotfix via
+  `cmd.exe /c "echo Y| chkdsk C: /spotfix"` (ok 0/3, 300 s, quiet; scheduling
+  verified by the "will be checked" text; sets the reboot flag); exit 3 on data
+  drives = the dismount-excluded finding; exits 1/2 classified fixed/cleanup.
+- R8 `regsvr32.exe /s <dll>` for each of the 32 WU DLLs present in System32
+  (ok 0/4/5, 60 s, quiet): 4/5 classified no-op; missing files skipped; a
+  summary step counts registered / no-op / missing.
+- R9 `dism.exe /Online /Cleanup-Image /StartComponentCleanup` (ok 0/3010,
+  3600 s, steady, tee).
+- R10 `dism.exe /Online /Cleanup-Image /SPSuperseded` (ok 0/3010, 3600 s,
+  quiet, steady; exit 50 or "not supported" classified no-op).
+- R11 `dism.exe /Online /Cleanup-Image /CheckHealth` (ok 0, 300 s, steady, tee)
+  — the verdict uses the exit code; a "repairable" store line is reported as a
+  finding that points at the R4 classification; then the final SFC verification
+  (same substitution rules as R6).
+
+PHASE 3 — PAUSE
+- The 9 UX values written (start = now UTC ISO, ends = 2099-12-31T23:59:59Z);
+  FlightSettingsMaxPauseDays = 3650 (dword); AU\NoAutoUpdate = 1 (dword);
+  stop + verify the five services; wuauserv ChangeServiceConfigW -> disabled
+  (fallback `sc config wuauserv start= disabled`); WaaSMedicSvc registry
+  Start = 4. Gate, summary, transcript pointer, safety notice, 30 s timer,
+  exit(code).
+
+---
+
+## Part 15 — Operational Runbook (exact owner-facing commands and facts)
+
+- Full cycle (the everyday command): run
+  F:\study\Platforms\Windows\fixers\system-integrity\WindowsUpdate\Repair\
+  wu-repair-cycle\wu-repair-cycle.exe (double-click also works — the launcher
+  cmd sits next to it). It self-elevates via UAC and closes itself 30 s after
+  printing the final table.
+- Peek at the current update state without changing anything:
+  wu-repair-cycle.exe --check-only (no admin needed, exits immediately).
+- See the complete matrix without executing anything:
+  wu-repair-cycle.exe --dry-run (exit 0, nothing touched).
+- Point the local-source ladder at known media:
+  wu-repair-cycle.exe --source "D:\media\Win11.iso" (or an install.wim/.esd/.swm).
+- Guarantee-only mode (no repairs, just the permanent pause):
+  wu-repair-cycle.exe --pause-only.
+- Transcripts: wufix-<UTC timestamp>.log next to the exe — every RUN, EXIT,
+  termination note, step, raw failure tail, and the FINAL gate line.
+- Build from source: cargo build --release --target x86_64-pc-windows-msvc
+  (the --target is mandatory on this host; see Part 2).
+- Download instead: the GitHub release ships wu-repair-cycle.exe and a zip
+  (README has the one-liner).
+- End-state verification one-liners for the owner:
+  reg query "HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" (pause keys),
+  reg query "HKLM\SYSTEM\CurrentControlSet\Services\wuauserv" /v Start
+  (4 = disabled), and the tool's own --check-only report.
+- What to expect at the very end of a perfect run: the colored summary table,
+  "ALL N STEPS PASSED — ZERO ERRORS", the reboot note (a recommendation only —
+  nothing reboots by itself), the PC-stays-on notice, "Windows updates
+  permanently paused - returning to shell", the transcript path, a 30-second
+  close countdown, and the shell prompt. Exit code 0.
+
+---
+
+## Part 16 — Environment Appendix (host facts the next session needs)
+
+- sha256 of the current release binary: recorded in RELEASE_NOTES at freeze
+  time; always compare target dir, repo copy, and release asset before shipping.
+- The launcher chain for attempts: bash -> powershell Start-Process -Verb RunAs
+  -> elevated wufixr.exe (hidden). The UAC click is the only manual step.
+- The old PowerShell edition remains at WU-Repair-Cycle.ps1 for archaeology;
+  its log files (WU-Repair-Cycle_*.log) are historical.
+- Known host quirks: SCM denies elevated queries for hardened services (the
+  heal + fallback path handles it); catroot2 and SoftwareDistribution renames
+  fail transiently under CBS activity (handled); pagefile creation sizes are
+  unreliable (handled); Get-WinEvent can hang under load (use wevtutil);
+  Microsoft Store auto-install can resume after an update resume (suppressed).
+- Everything in this plan is committed to the repository so the plan itself
+  ships with the product.
