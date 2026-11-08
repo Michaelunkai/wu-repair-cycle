@@ -267,9 +267,16 @@ pub fn sc_start(name: &str) -> bool {
             return true; // 1056 already running
         }
     }
-    for _ in 0..150 {
+    for i in 0..150 {
         if running_verified(name) {
             return true;
+        }
+        if i % 50 == 49 {
+            crate::ui::heartbeat(&format!(
+                "waiting for {} to reach RUNNING... ({}s elapsed)",
+                name,
+                (i + 1) / 5
+            ));
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
@@ -302,6 +309,26 @@ pub fn sc_stop(name: &str) -> bool {
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
     stopped_verified(name)
+}
+
+/// Wait for the WU datastore file to appear/grow, heartbeating so the console
+/// never goes silent for more than 10 s. Returns (ok, waited_secs).
+pub fn wait_datastore(path: &std::path::Path, max_secs: u64) -> (bool, u64) {
+    let mut waited = 0u64;
+    while waited < max_secs {
+        let ok = path.exists()
+            && std::fs::metadata(path).map(|m| m.len() > 100).unwrap_or(false);
+        if ok {
+            return (true, waited);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        waited += 5;
+        crate::ui::heartbeat(&format!(
+            "waiting for the fresh WU datastore to rebuild... ({}s of {}s)",
+            waited, max_secs
+        ));
+    }
+    (path.exists(), waited)
 }
 
 /// Set start type (2 auto / 3 manual / 4 disabled) and verify it stuck.

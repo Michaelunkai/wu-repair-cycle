@@ -65,6 +65,14 @@ Complete rewrite in Rust: zero dependencies, hand-rolled Win32 FFI (elevation, S
 See PLAN.md for the full demand ledger, classification rules, and the
 attempt-loop strategy.
 
+## v2.1.1 changes
+
+- SFC refusal (WRP conflict) now settles 90 s with heartbeat and retries once,
+  folded into a single classified step.
+- `msiserver` stop is retried (2 x 5 s); if Windows Installer is legitimately
+  busy it is left running and recorded as a harmless deferral (it does not hold
+  the update store), instead of failing the gate.
+
 ## Freeze record — v2.1.0 shipping binary
 
 - sha256 (first 32): 5608d78a9891dd04a7fab55c2493a840

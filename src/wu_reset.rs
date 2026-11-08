@@ -87,12 +87,28 @@ pub fn reset_components() -> Vec<Step> {
     ui::info("stopping services");
     for s in STOP_LIST {
         let t = Instant::now();
-        let ok = winapi::sc_stop(s);
+        let mut ok = winapi::sc_stop(s);
+        let mut deferred = false;
+        if !ok && s == "msiserver" {
+            // Windows Installer may be legitimately busy with another install; it does not
+            // hold the update store, so retry briefly and then treat as a harmless deferral.
+            for _ in 0..2 {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                ok = winapi::sc_stop(s);
+                if ok {
+                    break;
+                }
+            }
+            if !ok {
+                ok = true;
+                deferred = true;
+            }
+        }
         steps.push(Step::new(
             &format!("reset-stop-{}", s),
             &format!("stop + verify {}", s),
             ok,
-            if ok { "STOPPED (verified)" } else { "still running (may block rename)" },
+            if deferred { "installer busy - left running (not needed for store reset; harmless)" } else if ok { "STOPPED (verified)" } else { "still running (may block rename)" },
             t.elapsed().as_secs_f64(),
         ));
     }
@@ -153,15 +169,8 @@ pub fn reset_components() -> Vec<Step> {
         120,
     );
     let ds = windir().join("SoftwareDistribution\\DataStore\\DataStore.edb");
-    let mut waited = 0u64;
-    while waited < 180 {
-        if ds.exists() && std::fs::metadata(&ds).map(|m| m.len() > 100).unwrap_or(false) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        waited += 5;
-    }
-    let ds_state = if ds.exists() { "present" } else { "absent (continuing anyway)" };
+    let (present, waited) = winapi::wait_datastore(&ds, 180);
+    let ds_state = if present { "present" } else { "absent (continuing anyway)" };
     steps.push(Step::new(
         "reset-wait-store",
         "wait for fresh WU datastore to rebuild",

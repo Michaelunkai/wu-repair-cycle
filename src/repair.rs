@@ -41,6 +41,7 @@ fn sfc_run(flag: &str, timeout: u64) -> (Step, bool, bool) {
         || out.contains("Restart Windows")
         || out.contains("restart the computer")
         || out.contains("reboot");
+    let refused = out.contains("could not perform the requested operation");
     let cannot = out.contains("could not fix")
         || out.contains("unable to fix")
         || out.contains("cannot perform")
@@ -52,6 +53,8 @@ fn sfc_run(flag: &str, timeout: u64) -> (Step, bool, bool) {
         "no integrity violations".to_string()
     } else if pending {
         "CBS has pending repairs - reboot needed before SFC can verify".to_string()
+    } else if refused {
+        "SFC refused to run (WRP conflict - usually CBS mid-transaction); retry scheduled".to_string()
     } else if cannot {
         "found corruption it could NOT fix".to_string()
     } else if repaired {
@@ -316,7 +319,7 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
             for b in between.drain(..) {
                 steps.push(b);
             }
-            std::thread::sleep(std::time::Duration::from_secs(60));
+            ui::wait_steps(60, "settling before the next RestoreHealth attempt (CBS needs the pause)");
         }
     }
     if restore_succeeded {
@@ -508,7 +511,27 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
     }
 
     ui::step("R5: SFC /scannow");
-    let (s5, repaired, cannot) = sfc_run("/scannow", 5400);
+    let (mut s5, repaired, cannot) = sfc_run("/scannow", 5400);
+    // SFC sometimes refuses outright ("could not perform the requested
+    // operation") while CBS is mid-transaction: settle, then retry once.
+    // The refused attempt is folded into the retry's step (single print).
+    if !s5.ok && s5.detail.contains("refused to run") {
+        ui::warn("SFC refused (WRP conflict) - settling 90 s and retrying once");
+        ui::wait_steps(90, "letting CBS finish its transaction before the SFC retry");
+        let (s5r, repaired_r, cannot_r) = sfc_run("/scannow", 5400);
+        if repaired_r {
+            reboot = true;
+        }
+        let mut detail = format!(
+            "first attempt refused (WRP conflict) - retried after settle: {}",
+            s5r.detail
+        );
+        if s5r.detail.contains("no integrity violations") {
+            detail = format!("{} — first attempt was a WRP refusal, not corruption", detail);
+        }
+        s5 = Step::new(&s5.id, &s5.label, s5r.ok, &detail, s5.secs + s5r.secs);
+        let _ = cannot_r;
+    }
     if repaired {
         reboot = true;
     }

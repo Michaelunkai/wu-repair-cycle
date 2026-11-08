@@ -95,7 +95,7 @@ pub fn run_steady(quiet: bool, id: &str, program: &str, args: &[&str], ok_codes:
             "[{}] externally terminated (exit {}) - retrying ({} of 3)",
             id, r.code, kills
         ));
-        std::thread::sleep(std::time::Duration::from_secs(30));
+        crate::ui::wait_steps(30, "paused before retrying the terminated command");
         r = run_inner(id, program, args, ok_codes, timeout_secs, quiet);
     }
     if kills > 0 && r.ok {
@@ -170,6 +170,8 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
 
     let mut raw: Vec<u8> = Vec::new();
     let mut collected = String::new();
+    let mut last_progress = String::new();
+    let mut last_beat = Instant::now();
     let deadline = t0 + Duration::from_secs(timeout_secs.max(1));
     let mut timed_out = false;
     let mut code: i32 = -1;
@@ -181,7 +183,27 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
                 print!("{}", s);
                 let _ = std::io::stdout().flush();
             }
+            // keep the newest meaningful line as the live progress snapshot
+            for line in s.lines().rev() {
+                let t = line.trim();
+                if !t.is_empty() {
+                    let trunc: String = t.chars().take(64).collect();
+                    last_progress = trunc;
+                    break;
+                }
+            }
             collected.push_str(&s);
+        }
+        // THE 10-SECOND LAW: in quiet mode the console must never go silent —
+        // emit a heartbeat with elapsed time and the latest progress snapshot.
+        if quiet && last_beat.elapsed() >= Duration::from_secs(10) {
+            crate::ui::heartbeat(&format!(
+                "{} — {}s elapsed — {}",
+                id,
+                t0.elapsed().as_secs(),
+                if last_progress.is_empty() { "working..." } else { &last_progress }
+            ));
+            last_beat = Instant::now();
         }
         match child.try_wait() {
             Ok(Some(st)) => {
@@ -213,6 +235,14 @@ fn run_inner(id: &str, program: &str, args: &[&str], ok_codes: &[i32], timeout_s
             let _ = std::io::stdout().flush();
         }
         collected.push_str(&s);
+    }
+    if quiet {
+        crate::ui::heartbeat(&format!(
+            "{} — finished in {}s (exit {})",
+            id,
+            t0.elapsed().as_secs(),
+            code
+        ));
     }
     let _ = h_out.join();
     let _ = h_err.join();

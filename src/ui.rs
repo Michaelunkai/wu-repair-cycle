@@ -2,8 +2,37 @@
 
 use crate::verify::Step;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 static VT: AtomicBool = AtomicBool::new(false);
+
+// Optional console mirror: when WUFIX_CONSOLE_MIRROR points at a file, every
+// complete line the UI prints is appended there too (used for unattended
+// verification that the console never goes silent).
+static MIRROR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+
+fn mirror_file() -> &'static Option<std::path::PathBuf> {
+    MIRROR.get_or_init(|| {
+        std::env::var("WUFIX_CONSOLE_MIRROR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(std::path::PathBuf::from)
+    })
+}
+
+fn mirror_line(s: &str) {
+    if let Some(p) = mirror_file() {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+            let _ = std::io::Write::write_all(&mut f, format!("{}\n", s).as_bytes());
+        }
+    }
+}
+
+/// The single console emission point: prints the line and mirrors it.
+pub fn out(s: &str) {
+    println!("{}", s);
+    mirror_line(s);
+}
 
 pub fn enable() {
     let ok = crate::winapi::enable_vt();
@@ -43,34 +72,53 @@ fn dim(s: &str) -> String {
 
 fn rule(ch: &str) {
     let line: String = std::iter::repeat(ch).take(74).collect();
-    println!("{}", cyan(&line));
+    out(&cyan(&line));
 }
 
 pub fn banner(title: &str) {
-    println!();
+    out("");
     rule("=");
-    println!("  {}", cyan(&bold(title)));
+    out(&format!("  {}", cyan(&bold(title))));
     rule("=");
 }
 
 pub fn step(msg: &str) {
-    println!("\n{} {}", bold("[*]"), msg);
+    out(&format!("\n{} {}", bold("[*]"), msg));
 }
 
 pub fn info(msg: &str) {
-    println!("    {}", dim(msg));
+    out(&format!("    {}", dim(msg)));
 }
 
 pub fn ok(msg: &str) {
-    println!("    {} {}", green("[ok]"), msg);
+    out(&format!("    {} {}", green("[ok]"), msg));
 }
 
 pub fn warn(msg: &str) {
-    println!("    {} {}", yellow("[!]"), msg);
+    out(&format!("    {} {}", yellow("[!]"), msg));
 }
 
 pub fn err(msg: &str) {
-    println!("    {} {}", red("[X]"), msg);
+    out(&format!("    {} {}", red("[X]"), msg));
+}
+
+/// Heartbeat: a dim liveness line. The console must never go silent for more
+/// than 10 seconds — every long wait calls this on that cadence.
+pub fn heartbeat(msg: &str) {
+    out(&format!("  {} {}", cyan("[..]"), dim(msg)));
+}
+
+/// Wait `total_secs` one second at a time, emitting a heartbeat every 10 s so
+/// the console never goes silent during planned waits.
+pub fn wait_steps(total_secs: u64, label: &str) {
+    let mut since = 0u64;
+    for _ in 0..total_secs {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        since += 1;
+        if since % 10 == 0 {
+            heartbeat(&format!("{} — {}s of {}s", label, since, total_secs));
+        }
+    }
 }
 
 /// One line per executed command — the live heart of the output.
@@ -80,7 +128,7 @@ pub fn cmd_done(s: &Step) {
     } else {
         red("FAIL")
     };
-    println!(
+    out(&format!(
         "  {} {}{}  {}  {}  {}",
         status,
         bold(&s.id),
@@ -88,13 +136,13 @@ pub fn cmd_done(s: &Step) {
         wrap("2", &format!("{:6.1}s", s.secs)),
         if s.detail.is_empty() { "" } else { "—" },
         dim(&s.detail)
-    );
+    ));
 }
 
 /// The final zero-error table.
 pub fn summary(steps: &[Step], elapsed_secs: u64, reboot: bool) {
     banner("DONE — ZERO-ERROR GATE");
-    println!();
+    out("");
     let id_w = steps.iter().map(|s| s.id.len()).max().unwrap_or(4).max(4);
     for s in steps {
         let status = if s.ok {
@@ -102,39 +150,39 @@ pub fn summary(steps: &[Step], elapsed_secs: u64, reboot: bool) {
         } else {
             red("FAIL")
         };
-        println!(
+        out(&format!(
             "  {} {:<id_w$}  {:>6.1}s  {}",
             status,
             s.id,
             s.secs,
             dim(&s.detail),
             id_w = id_w
-        );
+        ));
     }
-    println!();
+    out("");
     rule("-");
     let failed = steps.iter().filter(|s| !s.ok).count();
     if failed == 0 {
-        println!(
+        out(&format!(
             "  {}",
             green(&bold(&format!(
                 "ALL {} STEPS PASSED — ZERO ERRORS",
                 steps.len()
             )))
-        );
+        ));
     } else {
-        println!(
+        out(&format!(
             "  {}",
             red(&bold(&format!(
                 "{} OF {} STEPS FAILED",
                 failed,
                 steps.len()
             )))
-        );
+        ));
     }
-    println!("  Runtime: {}m {:02}s", elapsed_secs / 60, elapsed_secs % 60);
+    out(&format!("  Runtime: {}m {:02}s", elapsed_secs / 60, elapsed_secs % 60));
     if reboot {
-        println!("  {}", yellow("REBOOT RECOMMENDED — repairs completed that need it."));
+        out(&format!("  {}", yellow("REBOOT RECOMMENDED — repairs completed that need it.")));
     }
-    println!();
+    out("");
 }
