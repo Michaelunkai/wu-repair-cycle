@@ -437,8 +437,23 @@ pub fn run_all(explicit_source: Option<&str>) -> (Vec<Step>, bool) {
                     if indexes.is_empty() {
                         continue;
                     }
+                    // CBS pins exact revisions: an image OLDER than the running OS
+                    // (known revision < UBR) can never supply the payloads - skip it
+                    // instead of burning a DISM run that is guaranteed to be refused.
+                    let usable: Vec<_> = indexes
+                        .iter()
+                        .filter(|w| w.revision == 0 || os_ubr == 0 || w.revision >= os_ubr)
+                        .cloned()
+                        .collect();
+                    if usable.is_empty() {
+                        ui::info(&format!(
+                            "skipping {}: image revision is older than the running OS (UBR {}) - cannot hold the pinned payloads",
+                            img, os_ubr
+                        ));
+                        continue;
+                    }
                     let ranked =
-                        crate::source::rank_indexes(&indexes, os_build, os_ubr, &os_edition);
+                        crate::source::rank_indexes(&usable, os_build, os_ubr, &os_edition);
                     for ix in ranked.into_iter().take(2) {
                         if runs >= 3 {
                             break 'outer;
