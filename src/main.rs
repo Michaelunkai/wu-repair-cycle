@@ -72,6 +72,11 @@ fn main() {
     }
 
     let t0 = Instant::now();
+    let awake = winapi::keep_awake();
+    runner::transcript_line(&format!(
+        "keep-awake (SetThreadExecutionState) set: {}",
+        awake
+    ));
     runner::transcript_line("=== WU-Repair-Cycle v2.1.0 full run ===");
     if let Some(s) = &explicit_source {
         runner::transcript_line(&format!("explicit source: {}", s));

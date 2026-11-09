@@ -166,3 +166,8 @@ fn index_detail_uses_image_version_not_dism_header() {
     assert_eq!(w.revision, 8246);
     assert_eq!(w.index, 6);
 }
+
+#[test]
+fn keep_awake_sets_execution_state() {
+    assert!(wu_repair_cycle::winapi::keep_awake());
+}

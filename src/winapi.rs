@@ -21,6 +21,7 @@ extern "system" {
     fn GetDriveTypeW(lpRootPathName: *const u16) -> u32;
     fn GetStdHandle(nStdHandle: i32) -> *mut c_void;
     fn GetConsoleMode(h: *mut c_void, lpMode: *mut u32) -> i32;
+    fn SetThreadExecutionState(esFlags: u32) -> u32;
     fn SetConsoleMode(h: *mut c_void, dwMode: u32) -> i32;
 }
 
@@ -900,5 +901,17 @@ pub fn enable_vt() -> bool {
             return false;
         }
         SetConsoleMode(h, mode | 0x0004) != 0 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    }
+}
+
+/// Keep the PC awake (no sleep, no display-off) for the life of the process.
+/// ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED. Never powers anything off.
+pub fn keep_awake() -> bool {
+    const ES_CONTINUOUS: u32 = 0x8000_0000;
+    const ES_SYSTEM_REQUIRED: u32 = 0x0000_0001;
+    const ES_DISPLAY_REQUIRED: u32 = 0x0000_0002;
+    // SAFETY: plain kernel32 call with flag constants.
+    unsafe {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) != 0
     }
 }
