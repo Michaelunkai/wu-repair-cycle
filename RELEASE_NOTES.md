@@ -94,3 +94,5 @@ attempt-loop strategy.
   EXITCODE=0, updates permanently paused to 2099-12-31T23:59:59Z verified live.
 
 - v2.1.1 live-verified exe sha256: 27264eac27c3aa19c8ee0ace2a2c6b659c8c1b8fec3c0dc6c4706d3350b78aa3
+
+- v2.1.2 live-verified exe sha256: 63d81c54e1ef96a170ed6df8add60fd4bdc10eb9f906194b6728a7cce4e336e1
