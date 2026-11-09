@@ -79,3 +79,5 @@ attempt-loop strategy.
 - See the release for the exact hash; the shipped exe is the one that completed
   the 2026-11-08 verification run: FINAL gate=0, 142 steps, failed=0,
   EXITCODE=0, updates permanently paused to 2099-12-31T23:59:59Z verified live.
+
+- v2.1.1 live-verified exe sha256: 27264eac27c3aa19c8ee0ace2a2c6b659c8c1b8fec3c0dc6c4706d3350b78aa3
