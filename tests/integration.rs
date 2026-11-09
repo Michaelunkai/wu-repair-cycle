@@ -157,3 +157,12 @@ fn rank_prefers_same_build_closest_revision_same_edition() {
         "the older build line must rank last"
     );
 }
+
+#[test]
+fn index_detail_uses_image_version_not_dism_header() {
+    let out = "Deployment Image Servicing and Management tool\nVersion: 10.0.26100.8972\n\nDetails for image : install.esd\n\nIndex : 6\nName : Windows 11 Pro\nDescription : Windows 11 Pro\nSize : 1 bytes\n\nArchitecture : x64\nHAL : <undefined>\nVersion : 10.0.26200\nServicePack Build : 8246\nServicePack Level : 0\nEdition : Professional\n";
+    let w = parse_index_detail(out).unwrap();
+    assert_eq!(w.build, 26200);
+    assert_eq!(w.revision, 8246);
+    assert_eq!(w.index, 6);
+}

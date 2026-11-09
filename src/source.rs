@@ -106,7 +106,7 @@ pub fn parse_index_detail(out: &str) -> Option<WimIndex> {
     let index = field(out, "Index")?.parse::<u32>().ok()?;
     let name = field(out, "Name").unwrap_or_default();
     let edition = field(out, "Edition").unwrap_or_default();
-    let build = field(out, "Version")
+    let build = field_last(out, "Version")
         .and_then(|v| v.split('.').nth(2).map(|s| s.trim().to_string()))
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
@@ -393,4 +393,21 @@ pub fn source_arg(kind: ImgKind, path: &str, index: u32) -> String {
         ImgKind::Esd => format!("/Source:esd:{}:{}", path, index),
         _ => format!("/Source:wim:{}:{}", path, index), // wim + swm
     }
+}
+
+/// Like `field` but returns the LAST match. DISM prints its own tool version
+/// ("Version: 10.0.26100.8972") before the image detail ("Version : 10.0.26200").
+fn field_last(out: &str, key: &str) -> Option<String> {
+    let mut found = None;
+    for line in out.lines() {
+        if let Some(rest) = line.trim().strip_prefix(key) {
+            if let Some(v) = rest.trim_start().strip_prefix(':') {
+                let v = v.trim();
+                if !v.is_empty() {
+                    found = Some(v.to_string());
+                }
+            }
+        }
+    }
+    found
 }
