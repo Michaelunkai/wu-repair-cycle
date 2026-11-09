@@ -67,6 +67,7 @@ Every step: verified honestly, streamed live in color, written to a timestamped 
 wu-repair-cycle.exe               full cycle (self-elevates via UAC)
 wu-repair-cycle.exe --dry-run     print the complete matrix, execute NOTHING, exit 0
 wu-repair-cycle.exe --check-only  read-only status report (no admin, no changes)
+wu-repair-cycle.exe --pause-only  permanent pause + end-state verification only (no repairs)
 wu-repair-cycle.exe --source D:\Win11.iso          add a repair image (ISO mounted on demand)
 wu-repair-cycle.exe --source X:\sources\install.esd point at a WIM/ESD/SWM directly
 ```
