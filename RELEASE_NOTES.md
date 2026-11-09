@@ -73,6 +73,15 @@ attempt-loop strategy.
   busy it is left running and recorded as a harmless deferral (it does not hold
   the update store), instead of failing the gate.
 
+## v2.1.2 changes
+
+- Local-source ranking fixed: the image `Version` is now read from the last
+  `Version` line of the DISM image detail (not the DISM tool header), so
+  Professional is ranked correctly and a build mismatch is detected.
+- Local images whose revision is older than the running OS revision (UBR) are
+  skipped with an INFO line instead of running a DISM call that is guaranteed to
+  return 0x800f0915 - a clean run now prints zero FAIL lines.
+
 ## Freeze record — v2.1.0 shipping binary
 
 - sha256 (first 32): 5608d78a9891dd04a7fab55c2493a840

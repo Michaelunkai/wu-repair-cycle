@@ -4,7 +4,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![Arch](https://img.shields.io/badge/arch-x86__64--msvc-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-2.1.1-orange)
+![Version](https://img.shields.io/badge/version-2.1.2-orange)
 
 **One run: RESUME Windows Update → run EVERY corruption-repair command Windows offers → PAUSE updates permanently until 2099 → return to shell.**
 
