@@ -1,3 +1,7 @@
+# Unreleased (source in main)
+
+- **Keep-awake**: the run now sets `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED|ES_DISPLAY_REQUIRED)` so the PC cannot sleep mid-repair. It never powers anything off. Covered by `keep_awake_sets_execution_state`.
+
 # v2.1.0 — the 0x800f0915 killers
 
 Two real bugs from live runs, fixed at the root:
